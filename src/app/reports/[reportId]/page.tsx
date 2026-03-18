@@ -1,0 +1,128 @@
+import { notFound } from "next/navigation";
+
+import { Badge, Panel, formatDate } from "@/components/dashboard";
+import { fetchReportDetail } from "@/lib/analytics";
+
+function listFromValue(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export default async function ReportDetailPage({
+  params,
+}: {
+  params: Promise<{ reportId: string }>;
+}) {
+  const { reportId } = await params;
+  const report = await fetchReportDetail(reportId);
+
+  if (!report) {
+    notFound();
+  }
+
+  const reportJson = (report.reportJson ?? {}) as Record<string, unknown>;
+  const highlights = listFromValue(reportJson.highlights);
+  const risks = listFromValue(reportJson.risks);
+  const nextActions = listFromValue(reportJson.next_actions ?? reportJson.nextActions);
+  const hypotheses = Array.isArray(reportJson.hypotheses) ? (reportJson.hypotheses as Array<Record<string, unknown>>) : [];
+  const conclusion = reportJson.conclusion as Record<string, unknown> | undefined;
+
+  return (
+    <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
+      <Panel
+        eyebrow="AI report"
+        title={report.title}
+        description="Persisted report bundle, rendered without any live model call."
+      >
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={report.status === "completed" ? "success" : "neutral"}>{report.status}</Badge>
+          <Badge tone="accent">{report.modelProvider}</Badge>
+          <Badge tone="neutral">{report.modelName}</Badge>
+        </div>
+        <p className="mt-5 max-w-4xl text-sm leading-7 text-zinc-300">{report.summaryText}</p>
+        <p className="mt-4 text-xs text-zinc-500">
+          {formatDate(report.completedAt ?? report.createdAt)} · {report.reportType}
+        </p>
+      </Panel>
+
+      <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <Panel eyebrow="Highlights" title="What the model called out">
+          <div className="space-y-3">
+            {highlights.length === 0 ? (
+              <p className="text-sm text-zinc-500">No highlights were stored.</p>
+            ) : (
+              highlights.map((item) => (
+                <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                  {item}
+                </p>
+              ))
+            )}
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Risks" title="Risks and next actions">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-50">Risks</h3>
+              <div className="mt-3 space-y-3">
+                {risks.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No risks were stored.</p>
+                ) : (
+                  risks.map((item) => (
+                    <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                      {item}
+                    </p>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-50">Next actions</h3>
+              <div className="mt-3 space-y-3">
+                {nextActions.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No next actions were stored.</p>
+                ) : (
+                  nextActions.map((item) => (
+                    <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                      {item}
+                    </p>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Panel eyebrow="Report context" title="Metrics used to write the report">
+          <pre className="overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+            {JSON.stringify(reportJson.summary ?? reportJson.analysis_snapshot ?? {}, null, 2)}
+          </pre>
+        </Panel>
+
+        <Panel eyebrow="Conclusion" title="Verdict and generated hypotheses">
+          <div className="space-y-4">
+            <pre className="overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+              {JSON.stringify(conclusion ?? {}, null, 2)}
+            </pre>
+            <div className="space-y-3">
+              {hypotheses.length === 0 ? (
+                <p className="text-sm text-zinc-500">No hypotheses were stored in the report payload.</p>
+              ) : (
+                hypotheses.map((item, index) => (
+                  <article key={index} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge tone="neutral">{String(item.status ?? "unknown")}</Badge>
+                      <Badge tone="accent">G{String(item.generation ?? "1")}</Badge>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-zinc-300">{String(item.claim_text ?? item.claimText ?? "")}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </Panel>
+      </section>
+    </main>
+  );
+}

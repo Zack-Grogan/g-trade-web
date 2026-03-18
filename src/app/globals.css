@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
 body {
-  font-family: system-ui, sans-serif;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.2);
+  color: #f8fafc;
 }
