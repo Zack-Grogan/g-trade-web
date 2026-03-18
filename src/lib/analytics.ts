@@ -63,7 +63,7 @@ export type EventRow = {
 export type TradeRow = {
   id: number;
   runId: string;
-  insertedAt?: string;
+  insertedAt: string | null;
   entryTime: string | null;
   exitTime: string | null;
   direction: number;
@@ -74,7 +74,7 @@ export type TradeRow = {
   zone: string | null;
   strategy: string | null;
   regime: string | null;
-  eventTagsJson?: unknown;
+  eventTagsJson: unknown | null;
   source: string | null;
   backfilled: boolean | null;
   payloadJson: Record<string, unknown> | null;
@@ -106,8 +106,95 @@ export type StateSnapshotRow = {
   payloadJson: Record<string, unknown> | null;
 };
 
+export type DecisionSnapshotRow = {
+  id: number;
+  runId: string;
+  decidedAt: string;
+  insertedAt: string;
+  decisionId: string;
+  attemptId: string | null;
+  processId: number | null;
+  symbol: string | null;
+  zone: string | null;
+  action: string | null;
+  reason: string | null;
+  outcome: string | null;
+  outcomeReason: string | null;
+  longScore: number | null;
+  shortScore: number | null;
+  flatBias: number | null;
+  scoreGap: number | null;
+  dominantSide: string | null;
+  currentPrice: number | null;
+  allowEntries: boolean | null;
+  executionTradeable: boolean | null;
+  contracts: number | null;
+  orderType: string | null;
+  limitPrice: number | null;
+  decisionPrice: number | null;
+  side: string | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  maxHoldMinutes: number | null;
+  regimeState: string | null;
+  regimeReason: string | null;
+  activeSession: string | null;
+  activeVetoes: unknown[];
+  featureSnapshot: Record<string, unknown> | null;
+  entryGuard: Record<string, unknown> | null;
+  unresolvedEntry: Record<string, unknown> | null;
+  eventContext: Record<string, unknown> | null;
+  orderFlow: Record<string, unknown> | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
+export type OrderLifecycleRow = {
+  id: number;
+  runId: string;
+  observedAt: string;
+  insertedAt: string;
+  decisionId: string | null;
+  attemptId: string | null;
+  orderId: string | null;
+  positionId: string | null;
+  tradeId: string | null;
+  processId: number | null;
+  symbol: string | null;
+  eventType: string | null;
+  status: string | null;
+  side: string | null;
+  role: string | null;
+  isProtective: boolean | null;
+  orderType: string | null;
+  quantity: number | null;
+  contracts: number | null;
+  limitPrice: number | null;
+  stopPrice: number | null;
+  expectedFillPrice: number | null;
+  filledPrice: number | null;
+  filledQuantity: number | null;
+  remainingQuantity: number | null;
+  zone: string | null;
+  reason: string | null;
+  lifecycleState: string | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
+export type BridgeHealthRow = {
+  id: number;
+  runId: string | null;
+  observedAt: string;
+  insertedAt: string;
+  bridgeStatus: string | null;
+  queueDepth: number | null;
+  lastFlushAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
 export type TimelineEntry = {
-  kind: "event" | "state_snapshot" | "trade";
+  kind: "event" | "state_snapshot" | "decision_snapshot" | "order_lifecycle" | "bridge_health" | "trade";
   timestamp: string | null;
   runId: string;
   [key: string]: unknown;
@@ -172,6 +259,9 @@ export type RunDetail = {
   events: EventRow[];
   trades: TradeRow[];
   stateSnapshots: StateSnapshotRow[];
+  decisionSnapshots: DecisionSnapshotRow[];
+  orderLifecycle: OrderLifecycleRow[];
+  bridgeHealth: BridgeHealthRow[];
   timeline: TimelineEntry[];
   blockers: TimelineEntry[];
 };
@@ -180,6 +270,8 @@ export type ReportDetail = ReportRow | null;
 
 const ANALYTICS_URL = process.env.ANALYTICS_API_URL || "";
 const ANALYTICS_KEY = process.env.ANALYTICS_API_KEY || "";
+
+type JsonRecord = Record<string, unknown>;
 
 function analyticsFetchInit() {
   return {
@@ -244,110 +336,265 @@ async function fetchAnalyticsJson<T>(path: string, params?: Record<string, strin
   }
 }
 
-function normalizeRunRow(run: any): RunRow {
+function asRecord(value: unknown): JsonRecord {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+
+  return {};
+}
+
+function stringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  return typeof value === "string" ? value : String(value);
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function recordOrNull(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
+
+function arrayOrEmpty(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function timelineKind(value: unknown): TimelineEntry["kind"] {
+  switch (typeof value === "string" ? value : "event") {
+    case "state_snapshot":
+    case "decision_snapshot":
+    case "order_lifecycle":
+    case "bridge_health":
+    case "trade":
+    case "event":
+      return value as TimelineEntry["kind"];
+    default:
+      return "event";
+  }
+}
+
+function normalizeRunRow(run: unknown): RunRow {
+  const record = asRecord(run);
   return {
-    runId: run?.run_id ?? run?.runId ?? "",
-    createdAt: run?.created_at ?? run?.createdAt ?? "",
-    lastSeenAt: run?.last_seen_at ?? run?.lastSeenAt ?? null,
-    processId: run?.process_id ?? run?.processId ?? null,
-    dataMode: run?.data_mode ?? run?.dataMode ?? null,
-    symbol: run?.symbol ?? null,
-    status: run?.status ?? null,
-    zone: run?.zone ?? null,
-    zoneState: run?.zone_state ?? run?.zoneState ?? null,
-    position: run?.position ?? null,
-    positionPnl: run?.position_pnl ?? run?.positionPnl ?? null,
-    dailyPnl: run?.daily_pnl ?? run?.dailyPnl ?? null,
-    riskState: run?.risk_state ?? run?.riskState ?? null,
-    lastEntryBlockReason: run?.last_entry_block_reason ?? run?.lastEntryBlockReason ?? null,
-    payloadJson: run?.payload_json ?? run?.payloadJson ?? null,
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    createdAt: stringOrEmpty(record.created_at ?? record.createdAt),
+    lastSeenAt: stringOrNull(record.last_seen_at ?? record.lastSeenAt),
+    processId: numberOrNull(record.process_id ?? record.processId),
+    dataMode: stringOrNull(record.data_mode ?? record.dataMode),
+    symbol: stringOrNull(record.symbol),
+    status: stringOrNull(record.status),
+    zone: stringOrNull(record.zone),
+    zoneState: stringOrNull(record.zone_state ?? record.zoneState),
+    position: numberOrNull(record.position),
+    positionPnl: numberOrNull(record.position_pnl ?? record.positionPnl),
+    dailyPnl: numberOrNull(record.daily_pnl ?? record.dailyPnl),
+    riskState: stringOrNull(record.risk_state ?? record.riskState),
+    lastEntryBlockReason: stringOrNull(record.last_entry_block_reason ?? record.lastEntryBlockReason),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
 
-function normalizeEventRow(event: any): EventRow {
+function normalizeEventRow(event: unknown): EventRow {
+  const record = asRecord(event);
   return {
-    id: event?.id ?? 0,
-    runId: event?.run_id ?? event?.runId ?? "",
-    eventTimestamp: event?.event_timestamp ?? event?.eventTimestamp ?? "",
-    insertedAt: event?.inserted_at ?? event?.insertedAt ?? "",
-    category: event?.category ?? null,
-    eventType: event?.event_type ?? event?.eventType ?? null,
-    source: event?.source ?? null,
-    symbol: event?.symbol ?? null,
-    zone: event?.zone ?? null,
-    action: event?.action ?? null,
-    reason: event?.reason ?? null,
-    orderId: event?.order_id ?? event?.orderId ?? null,
-    riskState: event?.risk_state ?? event?.riskState ?? null,
-    contracts: event?.contracts ?? null,
-    orderStatus: event?.order_status ?? event?.orderStatus ?? null,
-    guardReason: event?.guard_reason ?? event?.guardReason ?? null,
-    decisionSide: event?.decision_side ?? event?.decisionSide ?? null,
-    decisionPrice: event?.decision_price ?? event?.decisionPrice ?? null,
-    expectedFillPrice: event?.expected_fill_price ?? event?.expectedFillPrice ?? null,
-    entryGuardJson: event?.entry_guard_json ?? event?.entryGuardJson ?? null,
-    unresolvedEntryJson: event?.unresolved_entry_json ?? event?.unresolvedEntryJson ?? null,
-    executionJson: event?.execution_json ?? event?.executionJson ?? null,
-    payloadJson: event?.payload_json ?? event?.payloadJson ?? null,
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    eventTimestamp: stringOrEmpty(record.event_timestamp ?? record.eventTimestamp),
+    insertedAt: stringOrEmpty(record.inserted_at ?? record.insertedAt),
+    category: stringOrNull(record.category),
+    eventType: stringOrNull(record.event_type ?? record.eventType),
+    source: stringOrNull(record.source),
+    symbol: stringOrNull(record.symbol),
+    zone: stringOrNull(record.zone),
+    action: stringOrNull(record.action),
+    reason: stringOrNull(record.reason),
+    orderId: stringOrNull(record.order_id ?? record.orderId),
+    riskState: stringOrNull(record.risk_state ?? record.riskState),
+    contracts: numberOrNull(record.contracts),
+    orderStatus: stringOrNull(record.order_status ?? record.orderStatus),
+    guardReason: stringOrNull(record.guard_reason ?? record.guardReason),
+    decisionSide: stringOrNull(record.decision_side ?? record.decisionSide),
+    decisionPrice: numberOrNull(record.decision_price ?? record.decisionPrice),
+    expectedFillPrice: numberOrNull(record.expected_fill_price ?? record.expectedFillPrice),
+    entryGuardJson: recordOrNull(record.entry_guard_json ?? record.entryGuardJson),
+    unresolvedEntryJson: recordOrNull(record.unresolved_entry_json ?? record.unresolvedEntryJson),
+    executionJson: recordOrNull(record.execution_json ?? record.executionJson),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
 
-function normalizeTradeRow(trade: any): TradeRow {
+function normalizeTradeRow(trade: unknown): TradeRow {
+  const record = asRecord(trade);
   return {
-    id: trade?.id ?? 0,
-    runId: trade?.run_id ?? trade?.runId ?? "",
-    insertedAt: trade?.inserted_at ?? trade?.insertedAt ?? null,
-    entryTime: trade?.entry_time ?? trade?.entryTime ?? null,
-    exitTime: trade?.exit_time ?? trade?.exitTime ?? null,
-    direction: trade?.direction ?? 0,
-    contracts: trade?.contracts ?? 0,
-    entryPrice: trade?.entry_price ?? trade?.entryPrice ?? 0,
-    exitPrice: trade?.exit_price ?? trade?.exitPrice ?? 0,
-    pnl: trade?.pnl ?? 0,
-    zone: trade?.zone ?? null,
-    strategy: trade?.strategy ?? null,
-    regime: trade?.regime ?? null,
-    eventTagsJson: trade?.event_tags_json ?? trade?.eventTagsJson ?? null,
-    source: trade?.source ?? null,
-    backfilled: trade?.backfilled ?? null,
-    payloadJson: trade?.payload_json ?? trade?.payloadJson ?? null,
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    insertedAt: stringOrNull(record.inserted_at ?? record.insertedAt),
+    entryTime: stringOrNull(record.entry_time ?? record.entryTime),
+    exitTime: stringOrNull(record.exit_time ?? record.exitTime),
+    direction: numberOrZero(record.direction),
+    contracts: numberOrZero(record.contracts),
+    entryPrice: numberOrZero(record.entry_price ?? record.entryPrice),
+    exitPrice: numberOrZero(record.exit_price ?? record.exitPrice),
+    pnl: numberOrZero(record.pnl),
+    zone: stringOrNull(record.zone),
+    strategy: stringOrNull(record.strategy),
+    regime: stringOrNull(record.regime),
+    eventTagsJson: recordOrNull(record.event_tags_json ?? record.eventTagsJson),
+    source: stringOrNull(record.source),
+    backfilled: booleanOrNull(record.backfilled),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
 
-function normalizeStateSnapshotRow(snapshot: any): StateSnapshotRow {
+function normalizeStateSnapshotRow(snapshot: unknown): StateSnapshotRow {
+  const record = asRecord(snapshot);
   return {
-    id: snapshot?.id ?? 0,
-    runId: snapshot?.run_id ?? snapshot?.runId ?? "",
-    capturedAt: snapshot?.captured_at ?? snapshot?.capturedAt ?? "",
-    status: snapshot?.status ?? null,
-    dataMode: snapshot?.data_mode ?? snapshot?.dataMode ?? null,
-    symbol: snapshot?.symbol ?? null,
-    zone: snapshot?.zone ?? null,
-    zoneState: snapshot?.zone_state ?? snapshot?.zoneState ?? null,
-    position: snapshot?.position ?? null,
-    positionPnl: snapshot?.position_pnl ?? snapshot?.positionPnl ?? null,
-    dailyPnl: snapshot?.daily_pnl ?? snapshot?.dailyPnl ?? null,
-    riskState: snapshot?.risk_state ?? snapshot?.riskState ?? null,
-    lastSignalJson: snapshot?.last_signal_json ?? snapshot?.lastSignalJson ?? null,
-    lastEntryReason: snapshot?.last_entry_reason ?? snapshot?.lastEntryReason ?? null,
-    lastEntryBlockReason: snapshot?.last_entry_block_reason ?? snapshot?.lastEntryBlockReason ?? null,
-    decisionPrice: snapshot?.decision_price ?? snapshot?.decisionPrice ?? null,
-    entryGuardJson: snapshot?.entry_guard_json ?? snapshot?.entryGuardJson ?? null,
-    unresolvedEntryJson: snapshot?.unresolved_entry_json ?? snapshot?.unresolvedEntryJson ?? null,
-    executionJson: snapshot?.execution_json ?? snapshot?.executionJson ?? null,
-    heartbeatJson: snapshot?.heartbeat_json ?? snapshot?.heartbeatJson ?? null,
-    lifecycleJson: snapshot?.lifecycle_json ?? snapshot?.lifecycleJson ?? null,
-    observabilityJson: snapshot?.observability_json ?? snapshot?.observabilityJson ?? null,
-    payloadJson: snapshot?.payload_json ?? snapshot?.payloadJson ?? null,
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    capturedAt: stringOrEmpty(record.captured_at ?? record.capturedAt),
+    status: stringOrNull(record.status),
+    dataMode: stringOrNull(record.data_mode ?? record.dataMode),
+    symbol: stringOrNull(record.symbol),
+    zone: stringOrNull(record.zone),
+    zoneState: stringOrNull(record.zone_state ?? record.zoneState),
+    position: numberOrNull(record.position),
+    positionPnl: numberOrNull(record.position_pnl ?? record.positionPnl),
+    dailyPnl: numberOrNull(record.daily_pnl ?? record.dailyPnl),
+    riskState: stringOrNull(record.risk_state ?? record.riskState),
+    lastSignalJson: recordOrNull(record.last_signal_json ?? record.lastSignalJson),
+    lastEntryReason: stringOrNull(record.last_entry_reason ?? record.lastEntryReason),
+    lastEntryBlockReason: stringOrNull(record.last_entry_block_reason ?? record.lastEntryBlockReason),
+    decisionPrice: numberOrNull(record.decision_price ?? record.decisionPrice),
+    entryGuardJson: recordOrNull(record.entry_guard_json ?? record.entryGuardJson),
+    unresolvedEntryJson: recordOrNull(record.unresolved_entry_json ?? record.unresolvedEntryJson),
+    executionJson: recordOrNull(record.execution_json ?? record.executionJson),
+    heartbeatJson: recordOrNull(record.heartbeat_json ?? record.heartbeatJson),
+    lifecycleJson: recordOrNull(record.lifecycle_json ?? record.lifecycleJson),
+    observabilityJson: recordOrNull(record.observability_json ?? record.observabilityJson),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
 
-function normalizeTimelineEntry(entry: any): TimelineEntry {
+function normalizeDecisionSnapshotRow(snapshot: unknown): DecisionSnapshotRow {
+  const record = asRecord(snapshot);
   return {
-    ...entry,
-    kind: entry?.kind ?? "event",
-    timestamp: entry?.timestamp ?? null,
-    runId: entry?.run_id ?? entry?.runId ?? "",
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    decidedAt: stringOrEmpty(record.decided_at ?? record.decidedAt),
+    insertedAt: stringOrEmpty(record.inserted_at ?? record.insertedAt),
+    decisionId: stringOrEmpty(record.decision_id ?? record.decisionId),
+    attemptId: stringOrNull(record.attempt_id ?? record.attemptId),
+    processId: numberOrNull(record.process_id ?? record.processId),
+    symbol: stringOrNull(record.symbol),
+    zone: stringOrNull(record.zone),
+    action: stringOrNull(record.action),
+    reason: stringOrNull(record.reason),
+    outcome: stringOrNull(record.outcome),
+    outcomeReason: stringOrNull(record.outcome_reason ?? record.outcomeReason),
+    longScore: numberOrNull(record.long_score ?? record.longScore),
+    shortScore: numberOrNull(record.short_score ?? record.shortScore),
+    flatBias: numberOrNull(record.flat_bias ?? record.flatBias),
+    scoreGap: numberOrNull(record.score_gap ?? record.scoreGap),
+    dominantSide: stringOrNull(record.dominant_side ?? record.dominantSide),
+    currentPrice: numberOrNull(record.current_price ?? record.currentPrice),
+    allowEntries: booleanOrNull(record.allow_entries ?? record.allowEntries),
+    executionTradeable: booleanOrNull(record.execution_tradeable ?? record.executionTradeable),
+    contracts: numberOrNull(record.contracts),
+    orderType: stringOrNull(record.order_type ?? record.orderType),
+    limitPrice: numberOrNull(record.limit_price ?? record.limitPrice),
+    decisionPrice: numberOrNull(record.decision_price ?? record.decisionPrice),
+    side: stringOrNull(record.side),
+    stopLoss: numberOrNull(record.stop_loss ?? record.stopLoss),
+    takeProfit: numberOrNull(record.take_profit ?? record.takeProfit),
+    maxHoldMinutes: numberOrNull(record.max_hold_minutes ?? record.maxHoldMinutes),
+    regimeState: stringOrNull(record.regime_state ?? record.regimeState),
+    regimeReason: stringOrNull(record.regime_reason ?? record.regimeReason),
+    activeSession: stringOrNull(record.active_session ?? record.activeSession),
+    activeVetoes: arrayOrEmpty(record.active_vetoes ?? record.activeVetoes),
+    featureSnapshot: recordOrNull(record.feature_snapshot ?? record.featureSnapshot),
+    entryGuard: recordOrNull(record.entry_guard ?? record.entryGuard),
+    unresolvedEntry: recordOrNull(record.unresolved_entry ?? record.unresolvedEntry),
+    eventContext: recordOrNull(record.event_context ?? record.eventContext),
+    orderFlow: recordOrNull(record.order_flow ?? record.orderFlow),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
+function normalizeOrderLifecycleRow(row: unknown): OrderLifecycleRow {
+  const record = asRecord(row);
+  return {
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    observedAt: stringOrEmpty(record.observed_at ?? record.observedAt),
+    insertedAt: stringOrEmpty(record.inserted_at ?? record.insertedAt),
+    decisionId: stringOrNull(record.decision_id ?? record.decisionId),
+    attemptId: stringOrNull(record.attempt_id ?? record.attemptId),
+    orderId: stringOrNull(record.order_id ?? record.orderId),
+    positionId: stringOrNull(record.position_id ?? record.positionId),
+    tradeId: stringOrNull(record.trade_id ?? record.tradeId),
+    processId: numberOrNull(record.process_id ?? record.processId),
+    symbol: stringOrNull(record.symbol),
+    eventType: stringOrNull(record.event_type ?? record.eventType),
+    status: stringOrNull(record.status),
+    side: stringOrNull(record.side),
+    role: stringOrNull(record.role),
+    isProtective: booleanOrNull(record.is_protective ?? record.isProtective),
+    orderType: stringOrNull(record.order_type ?? record.orderType),
+    quantity: numberOrNull(record.quantity),
+    contracts: numberOrNull(record.contracts),
+    limitPrice: numberOrNull(record.limit_price ?? record.limitPrice),
+    stopPrice: numberOrNull(record.stop_price ?? record.stopPrice),
+    expectedFillPrice: numberOrNull(record.expected_fill_price ?? record.expectedFillPrice),
+    filledPrice: numberOrNull(record.filled_price ?? record.filledPrice),
+    filledQuantity: numberOrNull(record.filled_quantity ?? record.filledQuantity),
+    remainingQuantity: numberOrNull(record.remaining_quantity ?? record.remainingQuantity),
+    zone: stringOrNull(record.zone),
+    reason: stringOrNull(record.reason),
+    lifecycleState: stringOrNull(record.lifecycle_state ?? record.lifecycleState),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
+function normalizeBridgeHealthRow(row: unknown): BridgeHealthRow {
+  const record = asRecord(row);
+  return {
+    id: numberOrZero(record.id),
+    runId: stringOrNull(record.run_id ?? record.runId),
+    observedAt: stringOrEmpty(record.observed_at ?? record.observedAt),
+    insertedAt: stringOrEmpty(record.inserted_at ?? record.insertedAt),
+    bridgeStatus: stringOrNull(record.bridge_status ?? record.bridgeStatus),
+    queueDepth: numberOrNull(record.queue_depth ?? record.queueDepth),
+    lastFlushAt: stringOrNull(record.last_flush_at ?? record.lastFlushAt),
+    lastSuccessAt: stringOrNull(record.last_success_at ?? record.lastSuccessAt),
+    lastError: stringOrNull(record.last_error ?? record.lastError),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
+function normalizeTimelineEntry(entry: unknown): TimelineEntry {
+  const record = asRecord(entry);
+  return {
+    ...record,
+    kind: timelineKind(record.kind),
+    timestamp: stringOrNull(record.timestamp),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
   };
 }
 
@@ -468,17 +715,20 @@ export async function fetchDashboardData(): Promise<DashboardData | null> {
 }
 
 export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
-  const [run, events, trades, snapshots, timeline] = await Promise.all([
+  const [run, events, trades, snapshots, decisions, lifecycles, bridgeHealth, timeline] = await Promise.all([
     fetchAnalyticsJson<Record<string, unknown>>(`/runs/${runId}`),
     fetchAnalyticsJson<{ events: Record<string, unknown>[] }>(`/runs/${runId}/events`, { limit: 100 }),
     fetchAnalyticsJson<{ trades: Record<string, unknown>[] }>(`/runs/${runId}/trades`, { limit: 100 }),
     fetchAnalyticsJson<{ stateSnapshots: Record<string, unknown>[] }>(`/runs/${runId}/state_snapshots`, { limit: 50 }),
+    fetchAnalyticsJson<{ decisionSnapshots: Record<string, unknown>[] }>(`/runs/${runId}/decision_snapshots`, { limit: 50 }),
+    fetchAnalyticsJson<{ orderLifecycle: Record<string, unknown>[] }>(`/runs/${runId}/order_lifecycle`, { limit: 50 }),
+    fetchAnalyticsJson<{ bridgeHealth: Record<string, unknown>[] }>(`/runs/${runId}/bridge_health`, { limit: 50 }),
     fetchAnalyticsJson<{ timeline: Record<string, unknown>[]; blockers: Record<string, unknown>[] }>(`/runs/${runId}/timeline`, {
       limit: 300,
     }),
   ]);
 
-  if (!run && !events && !trades && !snapshots && !timeline) {
+  if (!run && !events && !trades && !snapshots && !decisions && !lifecycles && !bridgeHealth && !timeline) {
     return null;
   }
 
@@ -487,6 +737,9 @@ export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
     events: (events?.events ?? []).map(normalizeEventRow),
     trades: (trades?.trades ?? []).map(normalizeTradeRow),
     stateSnapshots: (snapshots?.stateSnapshots ?? []).map(normalizeStateSnapshotRow),
+    decisionSnapshots: (decisions?.decisionSnapshots ?? []).map(normalizeDecisionSnapshotRow),
+    orderLifecycle: (lifecycles?.orderLifecycle ?? []).map(normalizeOrderLifecycleRow),
+    bridgeHealth: (bridgeHealth?.bridgeHealth ?? []).map(normalizeBridgeHealthRow),
     timeline: (timeline?.timeline ?? []).map(normalizeTimelineEntry),
     blockers: (timeline?.blockers ?? []).map(normalizeTimelineEntry),
   };
@@ -571,4 +824,24 @@ export async function fetchRlmLibrary(): Promise<{
     reports: ReportRow[];
     metaLearnerStats: MetaLearnerStats | null;
   }>(query, { limit: 10 });
+}
+
+export async function fetchSearchResults(query: string): Promise<{
+  runs: RunRow[];
+  events: EventRow[];
+} | null> {
+  const cleaned = query.trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  const [runs, events] = await Promise.all([
+    fetchAnalyticsJson<{ runs: Record<string, unknown>[] }>("/search/runs", { q: cleaned, limit: 12 }),
+    fetchAnalyticsJson<{ events: Record<string, unknown>[] }>("/search/events", { q: cleaned, limit: 20 }),
+  ]);
+
+  return {
+    runs: (runs?.runs ?? []).map(normalizeRunRow),
+    events: (events?.events ?? []).map(normalizeEventRow),
+  };
 }

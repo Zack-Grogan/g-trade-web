@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
 import { Badge, Panel, formatDate } from "@/components/dashboard";
 import { fetchReportDetail } from "@/lib/analytics";
@@ -32,6 +33,14 @@ export default async function ReportDetailPage({
         eyebrow="AI report"
         title={report.title}
         description="Persisted report bundle, rendered without any live model call."
+        action={
+          <Link
+            href="/"
+            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+          >
+            Back to console
+          </Link>
+        }
       >
         <div className="flex flex-wrap gap-2">
           <Badge tone={report.status === "completed" ? "success" : "neutral"}>{report.status}</Badge>

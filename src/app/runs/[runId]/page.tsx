@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge, DataRow, DataTable, MiniBarChart, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
 import { fetchRunDetail } from "@/lib/analytics";
 
 function asText(value: unknown) {
-  if (value === null || value === undefined) {
+  if (value === null || value === undefined || value === "") {
     return "—";
   }
   return String(value);
@@ -16,14 +17,19 @@ function describeTimelineEntry(entry: Record<string, unknown>) {
     const riskState = entry.risk_state ?? entry.riskState ?? "—";
     return `state ${entry.status ?? "unknown"} · pos ${position} · risk ${riskState}`;
   }
+  if (entry.kind === "decision_snapshot") {
+    return `${entry.outcome ?? "decision"} · ${entry.reason ?? entry.outcome_reason ?? "no reason"}`;
+  }
+  if (entry.kind === "order_lifecycle") {
+    return `${entry.event_type ?? entry.eventType ?? "order"} · ${entry.status ?? "unknown"} · ${entry.reason ?? "no reason"}`;
+  }
+  if (entry.kind === "bridge_health") {
+    return `bridge ${entry.bridge_status ?? "unknown"} · queue ${entry.queue_depth ?? "—"} · ${entry.last_error ?? "no error"}`;
+  }
   if (entry.kind === "trade") {
     return `trade pnl ${asText(entry.pnl)} · ${asText(entry.zone)} · ${asText(entry.strategy)}`;
   }
-  return [
-    entry.event_type ?? entry.eventType ?? "event",
-    entry.category ?? "unknown",
-    entry.action ?? entry.reason ?? "—",
-  ].join(" · ");
+  return [entry.event_type ?? entry.eventType ?? "event", entry.category ?? "unknown", entry.action ?? entry.reason ?? "—"].join(" · ");
 }
 
 export default async function RunDetailPage({
@@ -41,14 +47,24 @@ export default async function RunDetailPage({
   const tradeValues = data.trades.slice(0, 8).map((trade) => trade.pnl);
   const tradeLabels = data.trades.slice(0, 8).map((trade) => trade.id.toString());
   const latestSnapshot = data.stateSnapshots[0] ?? null;
-  const latestBlocker = data.blockers[0] ?? null;
+  const latestDecision = data.decisionSnapshots[0] ?? null;
+  const latestLifecycle = data.orderLifecycle[0] ?? null;
+  const latestBridge = data.bridgeHealth[0] ?? null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
       <Panel
         eyebrow="Run detail"
         title={data.run.runId}
-        description="The run record, its events, and the trades that were closed under it."
+        description="The run record, its event stream, bridge health, and the trades that were closed under it."
+        action={
+          <Link
+            href="/"
+            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+          >
+            Back to console
+          </Link>
+        }
       >
         <div className="flex flex-wrap gap-2">
           <Badge tone="neutral">{data.run.dataMode ?? "unknown"}</Badge>
@@ -108,23 +124,80 @@ export default async function RunDetailPage({
           )}
         </Panel>
 
-        <Panel eyebrow="Blockers" title="Recent blockers" description="Reasons the engine did not enter or had to protect the position.">
-          {latestBlocker ? (
+        <Panel eyebrow="Decision trace" title="Latest decision" description="The most recent decision snapshot and its context.">
+          {latestDecision ? (
             <div className="space-y-3">
-              <Badge tone="warning">{asText(latestBlocker.eventType ?? latestBlocker.reason ?? latestBlocker.category)}</Badge>
-              <p className="text-sm text-zinc-300">{describeTimelineEntry(latestBlocker)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Badge tone={latestDecision.outcome === "order_submitted" ? "success" : latestDecision.outcome === "blocked" ? "warning" : "neutral"}>
+                  {latestDecision.outcome ?? "unknown"}
+                </Badge>
+                <Badge tone="accent">{latestDecision.decisionId.slice(-8) || `D${latestDecision.id}`}</Badge>
+                <Badge tone="neutral">{latestDecision.regimeState ?? "no regime"}</Badge>
+              </div>
+              <div className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                <p>Decision: {asText(latestDecision.decisionId)}</p>
+                <p>Reason: {asText(latestDecision.reason ?? latestDecision.outcomeReason)}</p>
+                <p>Score gap: {asText(latestDecision.scoreGap)}</p>
+                <p>Dominant side: {asText(latestDecision.dominantSide)}</p>
+              </div>
               <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
-                {JSON.stringify(latestBlocker, null, 2)}
+                {JSON.stringify(latestDecision.payloadJson ?? {}, null, 2)}
               </pre>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No blockers were reconstructed for this run.</p>
+            <p className="text-sm text-zinc-500">No decision snapshots found for this run.</p>
+          )}
+        </Panel>
+      </section>
+
+      <section className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Panel eyebrow="Bridge health" title="Latest bridge diagnostics" description="Telemetry sync and outbox health for this run.">
+          {latestBridge ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge tone={latestBridge.bridgeStatus === "running" ? "success" : "warning"}>{latestBridge.bridgeStatus ?? "unknown"}</Badge>
+                <Badge tone="neutral">Queue {asText(latestBridge.queueDepth)}</Badge>
+                <Badge tone="accent">{formatDate(latestBridge.observedAt)}</Badge>
+              </div>
+              <div className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                <p>Last flush: {formatDate(latestBridge.lastFlushAt)}</p>
+                <p>Last success: {formatDate(latestBridge.lastSuccessAt)}</p>
+              </div>
+              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-200">
+                {latestBridge.lastError ?? "No bridge error recorded."}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">No bridge health records found for this run.</p>
+          )}
+        </Panel>
+
+        <Panel eyebrow="Order lifecycle" title="Latest order events" description="Order submissions, fills, cancellations, and protective state changes.">
+          {latestLifecycle ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge tone="neutral">{latestLifecycle.eventType ?? "unknown"}</Badge>
+                <Badge tone={latestLifecycle.isProtective ? "warning" : "accent"}>{latestLifecycle.role ?? "role unknown"}</Badge>
+                <Badge tone="success">{formatDate(latestLifecycle.observedAt)}</Badge>
+              </div>
+              <div className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                <p>Order: {asText(latestLifecycle.orderId)}</p>
+                <p>Status: {asText(latestLifecycle.status)}</p>
+                <p>Reason: {asText(latestLifecycle.reason)}</p>
+                <p>Protective: {latestLifecycle.isProtective === null ? "—" : latestLifecycle.isProtective ? "yes" : "no"}</p>
+              </div>
+              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+                {JSON.stringify(latestLifecycle.payloadJson ?? {}, null, 2)}
+              </pre>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">No order lifecycle rows found for this run.</p>
           )}
         </Panel>
       </section>
 
       <section className="mt-6">
-        <Panel eyebrow="Timeline" title="Reconstructed run timeline" description="Signals, blocker events, state snapshots, and trades in one chronological stream.">
+        <Panel eyebrow="Timeline" title="Reconstructed run timeline" description="Signals, blocker events, state snapshots, decisions, order lifecycle, bridge health, and trades in one chronological stream.">
           <DataTable columns={["Kind", "Time", "Detail", "Reason"]}>
             {data.timeline.length === 0 ? (
               <div className="px-4 py-4 text-sm text-zinc-500">No timeline entries found for this run.</div>
@@ -141,7 +214,7 @@ export default async function RunDetailPage({
                       {describeTimelineEntry(entry)}
                     </span>,
                     <span key="reason" className="truncate">
-                      {asText((entry.reason as string | undefined) ?? (entry.guard_reason as string | undefined) ?? (entry.guardReason as string | undefined))}
+                      {asText((entry.reason as string | undefined) ?? (entry.guard_reason as string | undefined) ?? (entry.guardReason as string | undefined) ?? (entry.outcome_reason as string | undefined))}
                     </span>,
                   ]}
                 />

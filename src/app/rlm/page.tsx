@@ -4,6 +4,66 @@ import { auth } from "@clerk/nextjs/server";
 import { Badge, DataRow, DataTable, Panel, StatCard, formatDate, formatShort } from "@/components/dashboard";
 import { fetchRlmLibrary } from "@/lib/analytics";
 
+type LineageNode = {
+  id: string;
+  label: string;
+  status: string;
+  generation: number;
+  regimeContext: string | null;
+  children: LineageNode[];
+};
+
+function buildLineage(nodes: Array<{ hypothesisId: string; parentHypothesisId: string | null; claimText: string; status: string; generation: number; regimeContext: string | null }>) {
+  const lookup = new Map<string, LineageNode>();
+  const roots: LineageNode[] = [];
+
+  for (const item of nodes) {
+    lookup.set(item.hypothesisId, {
+      id: item.hypothesisId,
+      label: item.claimText,
+      status: item.status,
+      generation: item.generation,
+      regimeContext: item.regimeContext,
+      children: [],
+    });
+  }
+
+  for (const item of nodes) {
+    const node = lookup.get(item.hypothesisId);
+    if (!node) {
+      continue;
+    }
+
+    if (item.parentHypothesisId && lookup.has(item.parentHypothesisId)) {
+      lookup.get(item.parentHypothesisId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots.sort((left, right) => right.generation - left.generation || left.id.localeCompare(right.id));
+}
+
+function LineageTree({ node, depth = 0 }: { node: LineageNode; depth?: number }) {
+  return (
+    <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 ${depth > 0 ? "ml-4" : ""}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={node.status === "supported" ? "success" : node.status === "rejected" ? "warning" : "neutral"}>{node.status}</Badge>
+        <Badge tone="accent">G{node.generation}</Badge>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-zinc-200">{node.label}</p>
+      <p className="mt-2 text-xs text-zinc-500">{node.regimeContext ?? "No regime context"}</p>
+      {node.children.length ? (
+        <div className="mt-4 space-y-3 border-l border-white/10 pl-4">
+          {node.children.map((child) => (
+            <LineageTree key={child.id} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default async function RlmPage() {
   const { userId } = await auth();
   const data = userId ? await fetchRlmLibrary() : null;
@@ -11,8 +71,8 @@ export default async function RlmPage() {
   if (!userId) {
     return (
       <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <Panel eyebrow="RLM library" title="Sign in to view AI reports" description="This area shows batch-generated report bundles, hypotheses, and knowledge-store entries.">
-          <p className="text-sm text-zinc-400">Authenticate to open the read-only AI report library.</p>
+        <Panel eyebrow="RLM library" title="Sign in to view AI artifacts" description="This page shows persisted report bundles, hypotheses, and knowledge-store entries.">
+          <p className="text-sm text-zinc-400">Authenticate to open the graph and lineage explorer.</p>
         </Panel>
       </main>
     );
@@ -24,34 +84,45 @@ export default async function RlmPage() {
         <Panel
           eyebrow="RLM library"
           title="No RLM data yet"
-          description="Set ANALYTICS_API_URL and ANALYTICS_API_KEY on the web service to load report artifacts from the analytics API."
+          description="Set `ANALYTICS_API_URL` and `ANALYTICS_API_KEY` on the web service to load report artifacts from the analytics API."
         >
-          <p className="text-sm text-zinc-400">Once reports exist, they will appear here without any live model calls.</p>
+          <p className="text-sm text-zinc-400">Once artifacts exist, the lineage explorer will render the recursive graph on this page.</p>
         </Panel>
       </main>
     );
   }
+
+  const lineage = buildLineage(
+    data.hypotheses.map((item) => ({
+      hypothesisId: item.hypothesisId,
+      parentHypothesisId: item.parentHypothesisId,
+      claimText: item.claimText,
+      status: item.status,
+      generation: item.generation,
+      regimeContext: item.regimeContext,
+    })),
+  );
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <Panel
           eyebrow="RLM library"
-          title="Batch reports and research artifacts"
-          description="The AI layer is deliberately on-demand only. This page surfaces completed report bundles, generated hypotheses, and knowledge-store entries for review."
+          title="Recursive analysis artifacts"
+          description="Batch reports, generated hypotheses, and knowledge-store entries rendered as a lineage-first view."
           action={
             <Link
               href="/"
-              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-emerald-400/30 hover:bg-emerald-400/10 hover:text-white"
+              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
             >
-              Back to dashboard
+              Back to console
             </Link>
           }
         >
           <div className="flex flex-wrap gap-2">
-            <Badge tone="accent">No chat surface</Badge>
+            <Badge tone="accent">Graph-first</Badge>
             <Badge tone="success">Persisted artifacts</Badge>
-            <Badge tone="neutral">OpenRouter-backed reports</Badge>
+            <Badge tone="neutral">Advisory only</Badge>
           </div>
         </Panel>
 
@@ -67,7 +138,17 @@ export default async function RlmPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <Panel eyebrow="Lineage graph" title="Hypothesis tree" description="Parents, children, and generations laid out as recursive clusters.">
+          <div className="space-y-4">
+            {lineage.length === 0 ? (
+              <p className="text-sm text-zinc-500">No hypotheses yet.</p>
+            ) : (
+              lineage.map((node) => <LineageTree key={node.id} node={node} />)
+            )}
+          </div>
+        </Panel>
+
         <Panel eyebrow="Reports" title="Latest AI reports" description="Structured report bundles rendered from the analytics database.">
           <div className="space-y-3">
             {data.reports.length === 0 ? (
@@ -78,7 +159,7 @@ export default async function RlmPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">{report.modelProvider}</p>
-                      <Link href={`/reports/${report.reportId}`} className="mt-2 block text-base font-semibold text-zinc-50 transition hover:text-emerald-300">
+                      <Link href={`/reports/${report.reportId}`} className="mt-2 block text-base font-semibold text-zinc-50 transition hover:text-cyan-300">
                         {report.title}
                       </Link>
                     </div>
@@ -96,52 +177,49 @@ export default async function RlmPage() {
             )}
           </div>
         </Panel>
+      </section>
 
-        <Panel eyebrow="Research" title="Knowledge store and hypotheses" description="Supporting evidence for the reports above.">
-          <div className="space-y-5">
-            <DataTable columns={["Verdict", "Confidence", "Directive", "Created"]}>
-              {data.knowledgeStore.length === 0 ? (
-                <div className="px-4 py-4 text-sm text-zinc-500">No knowledge-store entries yet.</div>
-              ) : (
-                data.knowledgeStore.slice(0, 4).map((entry) => (
-                  <DataRow
-                    key={entry.id}
-                    cells={[
-                      <Badge key="verdict" tone={entry.verdict === "supported" ? "success" : entry.verdict === "rejected" ? "warning" : "neutral"}>
-                        {entry.verdict}
-                      </Badge>,
-                      <span key="confidence">{entry.confidenceScore ?? "—"}</span>,
-                      <span key="directive" className="truncate">
-                        {entry.mutationDirective ?? "—"}
-                      </span>,
-                      <span key="created">{formatDate(entry.createdAt)}</span>,
-                    ]}
-                  />
-                ))
-              )}
-            </DataTable>
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Panel eyebrow="Research" title="Knowledge store" description="Survival and rejection history for the recursive loop.">
+          <DataTable columns={["Verdict", "Confidence", "Directive", "Created"]}>
+            {data.knowledgeStore.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-zinc-500">No knowledge-store entries yet.</div>
+            ) : (
+              data.knowledgeStore.slice(0, 6).map((entry) => (
+                <DataRow
+                  key={entry.id}
+                  cells={[
+                    <Badge key="verdict" tone={entry.verdict === "supported" ? "success" : entry.verdict === "rejected" ? "warning" : "neutral"}>
+                      {entry.verdict}
+                    </Badge>,
+                    <span key="confidence">{entry.confidenceScore ?? "—"}</span>,
+                    <span key="directive" className="truncate">
+                      {entry.mutationDirective ?? "—"}
+                    </span>,
+                    <span key="created">{formatDate(entry.createdAt)}</span>,
+                  ]}
+                />
+              ))
+            )}
+          </DataTable>
+        </Panel>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <h3 className="text-sm font-semibold text-zinc-50">Latest hypotheses</h3>
-              <div className="mt-3 space-y-3">
-                {data.hypotheses.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No hypotheses yet.</p>
-                ) : (
-                  data.hypotheses.slice(0, 5).map((item) => (
-                    <article key={item.id} className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge tone={item.status === "supported" ? "success" : item.status === "rejected" ? "warning" : "neutral"}>
-                          {item.status}
-                        </Badge>
-                        <span className="text-xs text-zinc-500">G{item.generation}</span>
-                      </div>
-                      <p className="mt-3 text-sm leading-6 text-zinc-300">{item.claimText}</p>
-                      <p className="mt-2 text-xs text-zinc-500">{formatDate(item.createdAt)}</p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
+        <Panel eyebrow="Artifact summary" title="Latest hypotheses" description="The newest claims rendered with their current status.">
+          <div className="space-y-3">
+            {data.hypotheses.length === 0 ? (
+              <p className="text-sm text-zinc-500">No hypotheses yet.</p>
+            ) : (
+              data.hypotheses.slice(0, 5).map((item) => (
+                <article key={item.id} className="rounded-2xl border border-white/10 bg-zinc-950/50 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge tone={item.status === "supported" ? "success" : item.status === "rejected" ? "warning" : "neutral"}>{item.status}</Badge>
+                    <span className="text-xs text-zinc-500">G{item.generation}</span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-zinc-300">{item.claimText}</p>
+                  <p className="mt-2 text-xs text-zinc-500">{formatDate(item.createdAt)}</p>
+                </article>
+              ))
+            )}
           </div>
         </Panel>
       </section>

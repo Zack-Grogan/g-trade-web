@@ -1,10 +1,23 @@
 @import "tailwindcss";
 
+html {
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 25%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.13), transparent 22%),
+    linear-gradient(180deg, #020617 0%, #020617 38%, #040711 100%);
+}
+
 body {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  min-height: 100vh;
+  font-family: "Inter", "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  background: transparent;
 }
 
 ::selection {
   background: rgba(52, 211, 153, 0.2);
   color: #f8fafc;
+}
+
+a {
+  text-underline-offset: 0.2em;
 }
