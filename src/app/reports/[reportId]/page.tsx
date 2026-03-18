@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { Badge, Panel, formatDate } from "@/components/dashboard";
@@ -17,7 +16,30 @@ export default async function ReportDetailPage({
   const report = await fetchReportDetail(reportId);
 
   if (!report) {
-    notFound();
+    return (
+      <main className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
+        <Panel
+          eyebrow="AI report"
+          title="Report not found"
+          description="This report id is not present in analytics right now. The reports index is healthy, but there is no stored bundle for this identifier."
+          action={
+            <Link
+              href="/reports"
+              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+            >
+              Back to reports
+            </Link>
+          }
+        >
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+            Requested report id: <span className="font-mono text-zinc-100">{reportId}</span>
+          </div>
+          <p className="mt-4 text-sm text-zinc-400">
+            If you expected a report here, verify that RLM persisted it and that analytics can see the latest report rows.
+          </p>
+        </Panel>
+      </main>
+    );
   }
 
   const reportJson = (report.reportJson ?? {}) as Record<string, unknown>;
