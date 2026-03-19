@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 
 import { Badge, DataRow, DataTable, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
-import { fetchDashboardData, isSyntheticRunId } from "@/lib/analytics";
+import { fetchAccountSummaries, fetchAccountTrades, fetchDashboardData, isSyntheticRunId } from "@/lib/analytics";
 
 function modeTone(mode: string | null) {
   if (mode === "practice") {
@@ -16,7 +16,9 @@ function modeTone(mode: string | null) {
 
 export default async function RunsPage() {
   const { userId } = await auth();
-  const data = userId ? await fetchDashboardData() : null;
+  const [data, accountSummaries, accountTrades] = userId
+    ? await Promise.all([fetchDashboardData(), fetchAccountSummaries(), fetchAccountTrades({ limit: 12 })])
+    : [null, [], []];
 
   if (!userId) {
     return (
@@ -46,7 +48,7 @@ export default async function RunsPage() {
       <Panel
         eyebrow="Runs"
         title="Real run records"
-        description="This index hides synthetic validation runs by default so the list reflects operator-relevant evidence."
+        description="This index hides synthetic validation runs by default and falls back to the live account ledger when no real runs are available."
         action={
           <Link
             href="/"
@@ -73,7 +75,42 @@ export default async function RunsPage() {
 
         <DataTable columns={["Run", "Account", "Mode", "Last seen"]}>
           {realRuns.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-zinc-500">No real runs yet. If only validation rows exist, backfill account and run evidence first.</div>
+            <div className="space-y-4 px-4 py-4 text-sm text-zinc-500">
+              <p>No real runs yet. The account ledger below is the actual production evidence until run history backfill catches up.</p>
+              {accountSummaries.length ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Active account</p>
+                  <p className="mt-2 font-mono text-sm text-zinc-100">{accountSummaries[0]?.accountName ?? accountSummaries[0]?.accountId}</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {accountSummaries[0]?.accountMode ?? "unknown"} · {formatShort(accountSummaries[0]?.tradeCount ?? 0)} trades ·{" "}
+                    {formatCurrency(accountSummaries[0]?.realizedPnl ?? 0)}
+                  </p>
+                </div>
+              ) : null}
+              {accountTrades.length ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5">
+                  <div className="grid grid-cols-4 gap-4 border-b border-white/10 px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+                    <span>Account</span>
+                    <span>Side</span>
+                    <span>PnL</span>
+                    <span>Time</span>
+                  </div>
+                  {accountTrades.slice(0, 4).map((trade) => (
+                    <div key={trade.id} className="grid grid-cols-4 gap-4 border-b border-white/5 px-4 py-3 text-sm text-zinc-200 last:border-b-0">
+                      <div>
+                        <p className="font-mono text-xs text-zinc-100">{trade.accountName ?? trade.accountId}</p>
+                        <p className="text-xs text-zinc-500">{trade.brokerTradeId}</p>
+                      </div>
+                      <span>{trade.side === 1 ? "long" : trade.side === 0 ? "flat" : trade.side === -1 ? "short" : "unknown"}</span>
+                      <span className={typeof trade.profitAndLoss === "number" && trade.profitAndLoss >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                        {trade.profitAndLoss === null ? "—" : formatCurrency(trade.profitAndLoss)}
+                      </span>
+                      <span>{formatDate(trade.occurredAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ) : (
             realRuns.map((run) => (
               <DataRow
