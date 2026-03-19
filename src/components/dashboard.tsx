@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+type Tone = "neutral" | "success" | "warning" | "accent" | "danger";
+
 function formatValue(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
@@ -41,11 +43,64 @@ export function StatCard({
   note?: string;
 }) {
   return (
-    <article className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+    <article className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950 p-4">
       <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">{label}</p>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50">{value}</p>
-      {note ? <p className="mt-2 text-sm leading-6 text-zinc-400">{note}</p> : null}
+      <p className="mt-3 truncate text-2xl font-semibold tracking-tight text-zinc-50 tabular-nums">{value}</p>
+      {note ? <p className="mt-2 break-words text-sm leading-6 text-zinc-400">{note}</p> : null}
     </article>
+  );
+}
+
+export function KpiCard({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: Tone;
+}) {
+  const toneClasses = {
+    neutral: "border-zinc-800 bg-zinc-950",
+    success: "border-emerald-500/20 bg-emerald-500/10",
+    warning: "border-amber-500/20 bg-amber-500/10",
+    accent: "border-cyan-500/20 bg-cyan-500/10",
+    danger: "border-rose-500/20 bg-rose-500/10",
+  }[tone];
+
+  return (
+    <article className={`overflow-hidden rounded-xl border p-4 ${toneClasses}`}>
+      <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">{label}</p>
+      <p className="mt-3 truncate text-2xl font-semibold tracking-tight text-zinc-50 tabular-nums">{value}</p>
+      {detail ? <p className="mt-2 break-words text-sm leading-6 text-zinc-400">{detail}</p> : null}
+    </article>
+  );
+}
+
+export function StatusPill({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: Tone;
+}) {
+  const toneClasses = {
+    neutral: "border-zinc-800 bg-zinc-950 text-zinc-300",
+    success: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    warning: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+    accent: "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
+    danger: "border-rose-500/20 bg-rose-500/10 text-rose-200",
+  }[tone];
+
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px] font-medium ${toneClasses}`}>
+      <span className="uppercase tracking-[0.22em] text-zinc-500">{label}</span>
+      <span className="truncate tabular-nums">{value}</span>
+    </span>
   );
 }
 
@@ -63,12 +118,12 @@ export function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
-      <div className="flex items-start justify-between gap-4">
+    <section className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-5">
+      <div className="flex min-w-0 items-start justify-between gap-4">
         <div>
           {eyebrow ? <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">{eyebrow}</p> : null}
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-50">{title}</h2>
-          {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">{description}</p> : null}
+          {description ? <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-zinc-400">{description}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
@@ -82,16 +137,17 @@ export function Badge({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "success" | "warning" | "accent";
+  tone?: Tone;
 }) {
   const toneClasses = {
-    neutral: "border-zinc-800 bg-zinc-900 text-zinc-300",
+    neutral: "border-zinc-800 bg-zinc-950 text-zinc-300",
     success: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
     warning: "border-amber-500/20 bg-amber-500/10 text-amber-200",
     accent: "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
+    danger: "border-rose-500/20 bg-rose-500/10 text-rose-200",
   }[tone];
 
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClasses}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium ${toneClasses}`}>{children}</span>;
 }
 
 export function MiniBarChart({
@@ -111,9 +167,9 @@ export function MiniBarChart({
           const isPositive = value >= 0;
           return (
             <div key={`${labels[index]}-${index}`} className="flex-1">
-              <div className="relative flex h-full items-end rounded-xl border border-zinc-800 bg-zinc-900/70 p-1">
+              <div className="relative flex h-full items-end rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
                 <div
-                  className={`w-full rounded-lg ${isPositive ? "bg-emerald-400/80" : "bg-rose-400/80"}`}
+                  className={`w-full rounded-md ${isPositive ? "bg-emerald-400/80" : "bg-rose-400/80"}`}
                   style={{ height }}
                 />
               </div>
@@ -140,13 +196,13 @@ export function DataTable({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/80">
-      <div className="grid grid-cols-2 gap-3 border-b border-zinc-800 px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500 sm:grid-cols-4">
+    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950">
+      <div className="grid grid-cols-2 gap-3 border-b border-zinc-800/80 px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500 sm:grid-cols-4">
         {columns.map((column) => (
           <span key={column}>{column}</span>
         ))}
       </div>
-      <div className="divide-y divide-zinc-800">{children}</div>
+      <div className="divide-y divide-zinc-800/80">{children}</div>
     </div>
   );
 }
@@ -159,7 +215,7 @@ export function DataRow({
   return (
     <div className="grid grid-cols-2 gap-3 px-4 py-3 text-sm text-zinc-300 sm:grid-cols-4">
       {cells.map((cell, index) => (
-        <div key={index} className="min-w-0">
+        <div key={index} className="min-w-0 overflow-hidden">
           {cell}
         </div>
       ))}
@@ -181,9 +237,9 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/70 p-5">
+    <div className="rounded-xl border border-dashed border-zinc-800/80 bg-zinc-950 p-5">
       <p className="text-sm font-medium text-zinc-100">{title}</p>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{description}</p>
+      <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-zinc-400">{description}</p>
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );

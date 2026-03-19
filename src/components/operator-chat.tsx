@@ -88,38 +88,35 @@ export function OperatorChat({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-      <form onSubmit={submitAnalysis} className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
+      <form onSubmit={submitAnalysis} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Operator chat</p>
-            <h3 className="mt-2 text-xl font-semibold tracking-tight text-zinc-50">Trigger RLM-backed analysis</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-              Advisory only. The request stays server-side and returns a report, hypothesis, or feedback cycle with supporting context.
-            </p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Advisory</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight text-zinc-50">RLM prompt</h3>
           </div>
-          <Badge tone="neutral">Server-side only</Badge>
+          <Badge tone="neutral">Server-side</Badge>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <label className="space-y-2">
+            <label className="space-y-2">
             <span className="text-xs uppercase tracking-[0.22em] text-zinc-500">Prompt</span>
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               rows={7}
-              placeholder="Describe what you want investigated."
-              className="min-h-[14rem] w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-cyan-500/30 focus:ring-2 focus:ring-cyan-500/10"
+              placeholder="What should RLM inspect?"
+              className="min-h-[14rem] w-full rounded-xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-cyan-500/30 focus:ring-2 focus:ring-cyan-500/10"
             />
           </label>
 
           <div className="space-y-3">
             <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.22em] text-zinc-500">Run id</span>
+              <span className="text-xs uppercase tracking-[0.22em] text-zinc-500">Run</span>
               <input
                 value={runId}
                 onChange={(event) => setRunId(event.target.value)}
                 placeholder="Optional run id"
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-cyan-500/30 focus:ring-2 focus:ring-cyan-500/10"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-cyan-500/30 focus:ring-2 focus:ring-cyan-500/10"
               />
             </label>
 
@@ -129,7 +126,7 @@ export function OperatorChat({
                   key={currentMode}
                   type="button"
                   onClick={() => setMode(currentMode)}
-                  className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                  className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
                     mode === currentMode
                       ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-100"
                       : "border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
@@ -141,7 +138,7 @@ export function OperatorChat({
               ))}
             </div>
 
-            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/80 p-4">
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Quick prompts</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {QUICK_PROMPTS.map((suggestion) => (
@@ -163,9 +160,8 @@ export function OperatorChat({
                 disabled={isPending || !prompt.trim()}
                 className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isPending ? "Analyzing..." : "Run analysis"}
+                {isPending ? "Running..." : "Run"}
               </button>
-              <p className="text-sm text-zinc-500">The request runs through the web server and RLM service, not the browser.</p>
             </div>
 
             {error ? <p className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
@@ -174,13 +170,13 @@ export function OperatorChat({
       </form>
 
       <div className="space-y-5">
-        <article className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
           <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Result</p>
           {result ? (
             <div className="mt-3 space-y-4">
               <div className="flex flex-wrap gap-2">
                 <Badge tone="neutral">{result.mode}</Badge>
-                <Badge tone={result.ok ? "success" : "warning"}>{result.ok ? "Completed" : "Needs attention"}</Badge>
+                <Badge tone={result.ok ? "success" : "warning"}>{result.ok ? "Done" : "Check"}</Badge>
               </div>
               <h4 className="text-lg font-semibold tracking-tight text-zinc-50">{result.title}</h4>
               <p className="text-sm leading-6 text-zinc-300">{result.summary}</p>
@@ -189,7 +185,7 @@ export function OperatorChat({
                 <p className="mt-2 text-sm leading-6 text-zinc-200">{result.recommendation}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Next actions</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Next</p>
                 <ul className="mt-2 space-y-2 text-sm text-zinc-300">
                   {result.nextActions.map((item) => (
                     <li key={item} className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2">
@@ -221,7 +217,7 @@ export function OperatorChat({
           )}
         </article>
 
-        <article className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
           <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Artifact payload</p>
           {result?.artifact ? (
             <pre className="mt-3 max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">

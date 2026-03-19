@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Badge, DataRow, DataTable, EmptyState, MiniBarChart, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
 import { PageShell } from "@/components/page-shell";
-import { fetchAccountTrades, fetchRunDetail } from "@/lib/analytics";
+import { fetchRunDetail } from "@/lib/analytics";
 import { isSignedInRequest } from "@/lib/session";
 
 function asText(value: unknown) {
@@ -45,7 +45,7 @@ export default async function RunDetailPage({
   }
 
   const { runId } = await params;
-  const [data, accountTrades] = await Promise.all([fetchRunDetail(runId), fetchAccountTrades({ runId, limit: 12 })]);
+  const data = await fetchRunDetail(runId);
 
   if (!data?.run) {
     notFound();
@@ -64,7 +64,6 @@ export default async function RunDetailPage({
       <Panel
         eyebrow="Run detail"
         title={data.run.runId}
-        description="The run record, its event stream, bridge health, and the trades that were closed under it."
         action={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -78,6 +77,12 @@ export default async function RunDetailPage({
               className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
             >
               Open chart
+            </Link>
+            <Link
+              href="/accounts"
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+            >
+              Accounts
             </Link>
             {data.trades[0] ? (
               <Link
@@ -98,29 +103,29 @@ export default async function RunDetailPage({
           <Badge tone="success">{formatDate(data.run.createdAt)}</Badge>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <Panel eyebrow="Run facts" title="Metadata" description="Process id and payload snapshot.">
+          <Panel eyebrow="Run facts" title="Metadata">
             <p className="text-sm text-zinc-300">Process: {asText(data.run.processId)}</p>
             <p className="mt-2 text-sm text-zinc-300">Mode: {asText(data.run.dataMode)}</p>
             <p className="mt-2 text-sm text-zinc-300">Symbol: {asText(data.run.symbol)}</p>
             <p className="mt-2 text-sm text-zinc-300">Account: {asText(data.run.accountName ?? data.run.accountId)}</p>
           </Panel>
-          <Panel eyebrow="Trades" title="Closed trades" description="P&L from the latest trades on this run.">
+          <Panel eyebrow="Trades" title="Closed trades">
             <p className="text-2xl font-semibold text-zinc-50">{formatShort(data.trades.length)}</p>
             <p className="mt-2 text-sm text-zinc-400">{formatCurrency(data.trades.reduce((sum, trade) => sum + trade.pnl, 0))}</p>
           </Panel>
-          <Panel eyebrow="Events" title="Event count" description="Telemetry captured for this run.">
+          <Panel eyebrow="Events" title="Event count">
             <p className="text-2xl font-semibold text-zinc-50">{formatShort(data.events.length)}</p>
-            <p className="mt-2 text-sm text-zinc-400">{formatShort(data.blockers.length)} blockers in reconstructed timeline.</p>
+            <p className="mt-2 text-sm text-zinc-400">{formatShort(data.blockers.length)} blockers.</p>
           </Panel>
         </div>
       </Panel>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Panel eyebrow="Signal strip" title="Trade P&L" description="Quick view of the latest closed trades on this run.">
+        <Panel eyebrow="Signal strip" title="Trade P&L">
           <MiniBarChart values={tradeValues} labels={tradeLabels} />
         </Panel>
 
-        <Panel eyebrow="Payload" title="Run payload JSON" description="Raw run payload captured in analytics.">
+        <Panel eyebrow="Payload" title="Payload JSON">
           <pre className="max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
             {JSON.stringify(data.run.payloadJson ?? {}, null, 2)}
           </pre>
@@ -128,7 +133,7 @@ export default async function RunDetailPage({
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Panel eyebrow="Current state" title="Latest snapshot" description="The most recent trader state received by analytics.">
+        <Panel eyebrow="Current state" title="Latest snapshot">
           {latestSnapshot ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -147,11 +152,11 @@ export default async function RunDetailPage({
               </pre>
             </div>
           ) : (
-            <EmptyState title="No state snapshots" description="Analytics has not received a trader snapshot for this run." />
+            <EmptyState title="No state snapshots" description="No trader snapshot yet." />
           )}
         </Panel>
 
-        <Panel eyebrow="Decision trace" title="Latest decision" description="The most recent decision snapshot and its context.">
+        <Panel eyebrow="Decision trace" title="Latest decision">
           {latestDecision ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -172,13 +177,13 @@ export default async function RunDetailPage({
               </pre>
             </div>
           ) : (
-            <EmptyState title="No decision snapshots" description="Analytics has not received a decision snapshot for this run." />
+            <EmptyState title="No decision snapshots" description="No decision snapshot yet." />
           )}
         </Panel>
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Panel eyebrow="Bridge health" title="Latest bridge diagnostics" description="Telemetry sync and outbox health for this run.">
+        <Panel eyebrow="Bridge health" title="Bridge diagnostics">
           {latestBridge ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -195,11 +200,11 @@ export default async function RunDetailPage({
               </p>
             </div>
           ) : (
-            <EmptyState title="No bridge diagnostics" description="There are no bridge health rows for this run." />
+            <EmptyState title="No bridge diagnostics" description="No bridge rows yet." />
           )}
         </Panel>
 
-        <Panel eyebrow="Order lifecycle" title="Latest order events" description="Order submissions, fills, cancellations, and protective state changes.">
+        <Panel eyebrow="Order lifecycle" title="Order events">
           {latestLifecycle ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -218,16 +223,16 @@ export default async function RunDetailPage({
               </pre>
             </div>
           ) : (
-              <EmptyState title="No order lifecycle rows" description="The run does not have order lifecycle evidence yet." />
+              <EmptyState title="No order lifecycle rows" description="No order evidence yet." />
             )}
           </Panel>
       </section>
 
       <section className="mt-6">
-        <Panel eyebrow="Timeline" title="Reconstructed run timeline" description="Signals, blocker events, state snapshots, decisions, order lifecycle, bridge health, and trades in one chronological stream.">
+        <Panel eyebrow="Timeline" title="Run timeline">
           <DataTable columns={["Kind", "Time", "Detail", "Reason"]}>
             {data.timeline.length === 0 ? (
-              <EmptyState title="No timeline entries" description="The reconstructed run timeline is empty for this run." />
+              <EmptyState title="No timeline entries" description="No timeline rows yet." />
             ) : (
               data.timeline.slice(0, 12).map((entry, index) => (
                 <DataRow
@@ -252,10 +257,10 @@ export default async function RunDetailPage({
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Panel eyebrow="Trades" title="Closed trades" description="The trades associated with this run.">
+        <Panel eyebrow="Trades" title="Closed trades">
           <DataTable columns={["PnL", "Zone", "Strategy", "Exit"]}>
             {data.trades.length === 0 ? (
-              <EmptyState title="No trades" description="The run does not have closed trade rows yet." />
+              <EmptyState title="No trades" description="No closed trades yet." />
             ) : (
               data.trades.slice(0, 8).map((trade) => (
                 <DataRow
@@ -273,35 +278,13 @@ export default async function RunDetailPage({
             )}
           </DataTable>
         </Panel>
-
-        <Panel eyebrow="Account ledger" title="Broker account trades" description="Account-level broker history captured under this run, useful for backfill verification.">
-          <DataTable columns={["Trade", "Side", "PnL", "Time"]}>
-            {accountTrades.length === 0 ? (
-              <EmptyState title="No broker account trades" description="The account ledger has not been linked to this run." />
-            ) : (
-              accountTrades.slice(0, 8).map((trade) => (
-                <DataRow
-                  key={`${trade.accountId}-${trade.brokerTradeId}`}
-                  cells={[
-                    <span key="trade">{trade.brokerTradeId}</span>,
-                    <span key="side">{trade.side === 1 ? "buy" : trade.side === 0 ? "sell" : "unknown"}</span>,
-                    <span key="pnl" className={(trade.profitAndLoss ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}>
-                      {formatCurrency(trade.profitAndLoss ?? 0)}
-                    </span>,
-                    <span key="time">{formatDate(trade.occurredAt)}</span>,
-                  ]}
-                />
-              ))
-            )}
-          </DataTable>
-        </Panel>
       </section>
 
       <section className="mt-6">
-        <Panel eyebrow="Events" title="Latest telemetry" description="Most recent events captured during the run.">
+        <Panel eyebrow="Events" title="Latest telemetry">
           <DataTable columns={["Type", "Category", "Symbol", "Time"]}>
             {data.events.length === 0 ? (
-              <EmptyState title="No events" description="The analytics event stream is empty for this run." />
+              <EmptyState title="No events" description="No event rows yet." />
             ) : (
               data.events.slice(0, 8).map((event) => (
                 <DataRow
