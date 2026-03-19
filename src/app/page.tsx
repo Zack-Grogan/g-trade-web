@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
-import { SignInButton } from "@clerk/nextjs";
 import Link from "next/link";
 
 import { Badge, DataRow, DataTable, MiniBarChart, Panel, StatCard, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
+import { PageShell } from "@/components/page-shell";
 import { OperatorChat } from "@/components/operator-chat";
 import {
   fetchAccountSummaries,
@@ -16,6 +15,7 @@ import {
   isSyntheticRunId,
   type RunRow,
 } from "@/lib/analytics";
+import { isSignedInRequest } from "@/lib/session";
 
 function toneForMode(mode: string | null) {
   if (mode === "practice") {
@@ -68,30 +68,13 @@ export default async function Home({
     runId?: string;
   }>;
 }) {
-  const { userId } = await auth();
+  const signedIn = await isSignedInRequest();
   const params = await searchParams;
   const query = (params.q || "").trim();
   const requestedRunId = (params.runId || "").trim();
 
-  if (!userId) {
-    return (
-      <main className="mx-auto flex min-h-[70vh] max-w-7xl items-center px-6 py-16 lg:px-8">
-        <div className="max-w-2xl rounded-3xl border border-white/10 bg-zinc-900/80 p-10 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-emerald-400">G-Trade operator console</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-50">Read the account ledger, bridge health, and strategy evidence</h1>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">
-            Sign in to review account-mode telemetry, bridge freshness, run blockers, and advisory RLM analysis. The web app stays read-only for execution.
-          </p>
-          <div className="mt-6">
-            <SignInButton mode="modal">
-              <span className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:border-cyan-400/30 hover:bg-cyan-400/10">
-                Sign in to continue
-              </span>
-            </SignInButton>
-          </div>
-        </div>
-      </main>
-    );
+  if (!signedIn) {
+    return <PageShell authenticated={false} />;
   }
 
   const [dashboard, rlmLibrary, searchResults, accountSummaries, accountTrades, bridgeFailures, serviceHealth] = await Promise.all([
@@ -136,7 +119,8 @@ export default async function Home({
   });
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+    <PageShell authenticated>
+      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel
           eyebrow="Operator cockpit"
@@ -145,7 +129,7 @@ export default async function Home({
           action={
             <Link
               href="/runs"
-              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
             >
               Open run index
             </Link>
@@ -173,19 +157,19 @@ export default async function Home({
               <Badge tone="neutral">{activeRun?.run?.status ?? "status unknown"}</Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Last seen</p>
                 <p className="mt-2 text-sm text-zinc-200">{formatDate(activeRun?.run?.lastSeenAt ?? activeRun?.run?.createdAt ?? null)}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Timeline blockers</p>
                 <p className="mt-2 text-sm text-zinc-200">{formatShort(activeRun?.blockers.length ?? 0)}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Bridge status</p>
                 <p className="mt-2 text-sm text-zinc-200">{activeRun?.bridgeHealth[0]?.bridgeStatus ?? "unknown"}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Decision pressure</p>
                 <p className="mt-2 text-sm text-zinc-200">{activeRun?.decisionSnapshots[0]?.outcome ?? activeRun?.decisionSnapshots[0]?.reason ?? "No decision snapshot"}</p>
               </div>
@@ -193,7 +177,7 @@ export default async function Home({
             {activeRun?.run ? (
               <Link
                 href={`/runs/${activeRun.run.runId}`}
-                className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/15 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-400/20"
+                className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
               >
                 Open full investigation view
               </Link>
@@ -208,7 +192,7 @@ export default async function Home({
         <Panel eyebrow="Decision board" title="What needs operator attention next" description="These prompts are derived from real telemetry gaps, not generic productivity filler.">
           <div className="space-y-3">
             {operatorActions.map((action) => (
-              <div key={action} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-200">
+              <div key={action} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm text-zinc-200">
                 {action}
               </div>
             ))}
@@ -219,7 +203,7 @@ export default async function Home({
           {accountTrades.length ? (
             <MiniBarChart values={accountTradeBars} labels={accountTradeLabels} />
           ) : (
-            <p className="text-sm text-zinc-500">No account-trade history is visible yet.</p>
+              <p className="text-sm text-zinc-500">No account-trade history is visible yet.</p>
           )}
         </Panel>
       </section>
@@ -295,7 +279,7 @@ export default async function Home({
             </label>
             <button
               type="submit"
-              className="mt-auto inline-flex items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/15 px-4 py-3 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+              className="mt-auto inline-flex items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-3 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20"
             >
               Search
             </button>
@@ -328,21 +312,21 @@ export default async function Home({
 
         <Panel eyebrow="Service health" title="Can you trust what you are seeing?" description="If the bridge is stale or runtime logs stopped arriving, the web should tell you before you trust any analysis.">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest bridge</p>
               <p className="mt-2 text-sm text-zinc-200">{serviceHealth?.bridge ? String(serviceHealth.bridge.bridge_status ?? "unknown") : "No bridge heartbeat"}</p>
               <p className="mt-1 text-xs text-zinc-500">{serviceHealth?.bridge ? formatDate(String(serviceHealth.bridge.observed_at ?? "")) : "No timestamp"}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Runtime logs</p>
               <p className="mt-2 text-sm text-zinc-200">{formatShort(serviceHealth?.runtimeLogs?.count ?? 0)}</p>
               <p className="mt-1 text-xs text-zinc-500">{formatDate(serviceHealth?.runtimeLogs?.latestLoggedAt ?? null)}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest bridge error</p>
               <p className="mt-2 text-sm text-zinc-200">{bridgeFailures[0]?.lastError ?? "No active bridge failure"}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest report</p>
               <p className="mt-2 text-sm text-zinc-200">{latestReport?.title ?? "No report yet"}</p>
               <p className="mt-1 text-xs text-zinc-500">{formatDate(latestReport?.createdAt ?? null)}</p>
@@ -354,12 +338,12 @@ export default async function Home({
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel eyebrow="RLM" title="Latest advisory artifacts" description="Keep RLM visible, but tie it back to real telemetry rather than letting it float as an isolated artifact browser.">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest hypothesis</p>
               <p className="mt-2 text-sm text-zinc-200">{latestHypothesis?.claimText ?? "No hypothesis yet"}</p>
               <p className="mt-1 text-xs text-zinc-500">{latestHypothesis?.status ?? "no status"}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest report</p>
               <p className="mt-2 text-sm text-zinc-200">{latestReport?.summaryText ?? "No report summary yet"}</p>
               <p className="mt-1 text-xs text-zinc-500">{latestReport?.reportType ?? "no report type"}</p>
@@ -369,6 +353,7 @@ export default async function Home({
 
         <OperatorChat defaultRunId={activeRun?.run?.runId ?? realRuns[0]?.runId ?? null} />
       </section>
-    </main>
+      </main>
+    </PageShell>
   );
 }

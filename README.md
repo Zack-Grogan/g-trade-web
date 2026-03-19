@@ -2,6 +2,10 @@
 
 Internal operator console for the G-Trade Railway project. The app is Clerk-authenticated and read-only from an execution standpoint: it investigates runs, bridge health, and persisted AI artifacts, but it does not control the trader.
 
+The current UI uses a sidebar-first admin shell with compact top-bar search, route-aware navigation, collapsible desktop navigation, and task-focused views for Console, Runs, RLM, and Reports. When unauthenticated, the app shows only the login screen. The design is intentionally minimal and data-dense so the live account ledger and bridge diagnostics stay readable.
+
+For Clerk-gated behavior, the live Railway deployment is the source of truth. Use local `bun run dev` or `bun run start` for build and smoke checks, but validate final visibility, navigation, and login-only behavior on the deployed Railway URL after each push.
+
 ## Surfaces
 
 - `GET /` - operator console for run/bridge/log investigation and advisory chat
@@ -20,6 +24,10 @@ Internal operator console for the G-Trade Railway project. The app is Clerk-auth
 - `RLM_AUTH_TOKEN` for the RLM service when direct generation is enabled
 
 All backend access stays on the server. No service tokens are exposed to the browser.
+
+Keyboard shortcut:
+
+- `Cmd+K` / `Ctrl+K` focuses the global search field in the shell.
 
 ## Build
 

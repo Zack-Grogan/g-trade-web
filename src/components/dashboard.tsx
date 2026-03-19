@@ -41,10 +41,10 @@ export function StatCard({
   note?: string;
 }) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)] backdrop-blur">
-      <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-400">{label}</p>
+    <article className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+      <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">{label}</p>
       <p className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50">{value}</p>
-      {note ? <p className="mt-2 text-sm text-zinc-400">{note}</p> : null}
+      {note ? <p className="mt-2 text-sm leading-6 text-zinc-400">{note}</p> : null}
     </article>
   );
 }
@@ -63,10 +63,10 @@ export function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur">
+    <section className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          {eyebrow ? <p className="text-[11px] uppercase tracking-[0.24em] text-emerald-400">{eyebrow}</p> : null}
+          {eyebrow ? <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">{eyebrow}</p> : null}
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-50">{title}</h2>
           {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">{description}</p> : null}
         </div>
@@ -85,10 +85,10 @@ export function Badge({
   tone?: "neutral" | "success" | "warning" | "accent";
 }) {
   const toneClasses = {
-    neutral: "border-white/10 bg-white/5 text-zinc-300",
-    success: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-    warning: "border-amber-400/20 bg-amber-400/10 text-amber-200",
-    accent: "border-cyan-400/20 bg-cyan-400/10 text-cyan-200",
+    neutral: "border-zinc-800 bg-zinc-900 text-zinc-300",
+    success: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    warning: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+    accent: "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
   }[tone];
 
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClasses}`}>{children}</span>;
@@ -105,13 +105,13 @@ export function MiniBarChart({
 
   return (
     <div className="space-y-3">
-      <div className="flex h-32 items-end gap-2">
+      <div className="flex h-28 items-end gap-2">
         {values.map((value, index) => {
           const height = `${Math.max((Math.abs(value) / max) * 100, 8)}%`;
           const isPositive = value >= 0;
           return (
             <div key={`${labels[index]}-${index}`} className="flex-1">
-              <div className="relative flex h-full items-end rounded-xl bg-white/5 p-1">
+              <div className="relative flex h-full items-end rounded-xl border border-zinc-800 bg-zinc-900/70 p-1">
                 <div
                   className={`w-full rounded-lg ${isPositive ? "bg-emerald-400/80" : "bg-rose-400/80"}`}
                   style={{ height }}
@@ -140,13 +140,13 @@ export function DataTable({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-      <div className="grid grid-cols-2 gap-3 border-b border-white/10 px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500 sm:grid-cols-4">
+    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/80">
+      <div className="grid grid-cols-2 gap-3 border-b border-zinc-800 px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500 sm:grid-cols-4">
         {columns.map((column) => (
           <span key={column}>{column}</span>
         ))}
       </div>
-      <div className="divide-y divide-white/5">{children}</div>
+      <div className="divide-y divide-zinc-800">{children}</div>
     </div>
   );
 }
@@ -169,4 +169,22 @@ export function DataRow({
 
 export function formatShort(value: number) {
   return formatValue(value);
+}
+
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/70 p-5">
+      <p className="text-sm font-medium text-zinc-100">{title}</p>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{description}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
 }

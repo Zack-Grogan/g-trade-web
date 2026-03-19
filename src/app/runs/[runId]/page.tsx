@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Badge, DataRow, DataTable, MiniBarChart, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
+import { Badge, DataRow, DataTable, EmptyState, MiniBarChart, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
+import { PageShell } from "@/components/page-shell";
 import { fetchAccountTrades, fetchRunDetail } from "@/lib/analytics";
+import { isSignedInRequest } from "@/lib/session";
 
 function asText(value: unknown) {
   if (value === null || value === undefined || value === "") {
@@ -37,6 +39,11 @@ export default async function RunDetailPage({
 }: {
   params: Promise<{ runId: string }>;
 }) {
+  const signedIn = await isSignedInRequest();
+  if (!signedIn) {
+    return <PageShell authenticated={false} />;
+  }
+
   const { runId } = await params;
   const [data, accountTrades] = await Promise.all([fetchRunDetail(runId), fetchAccountTrades({ runId, limit: 12 })]);
 
@@ -52,7 +59,8 @@ export default async function RunDetailPage({
   const latestBridge = data.bridgeHealth[0] ?? null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
+    <PageShell authenticated>
+      <main className="mx-auto max-w-6xl space-y-6 px-6 py-10 lg:px-8">
       <Panel
         eyebrow="Run detail"
         title={data.run.runId}
@@ -60,7 +68,7 @@ export default async function RunDetailPage({
         action={
           <Link
             href="/"
-            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+            className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
           >
             Back to console
           </Link>
@@ -97,7 +105,7 @@ export default async function RunDetailPage({
         </Panel>
 
         <Panel eyebrow="Payload" title="Run payload JSON" description="Raw run payload captured in analytics.">
-          <pre className="max-h-[24rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+          <pre className="max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
             {JSON.stringify(data.run.payloadJson ?? {}, null, 2)}
           </pre>
         </Panel>
@@ -118,12 +126,12 @@ export default async function RunDetailPage({
                 <p>Daily PnL: {formatCurrency(latestSnapshot.dailyPnl ?? 0)}</p>
                 <p>Last block: {asText(latestSnapshot.lastEntryBlockReason)}</p>
               </div>
-              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
                 {JSON.stringify(latestSnapshot.payloadJson ?? {}, null, 2)}
               </pre>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No state snapshots found for this run.</p>
+            <EmptyState title="No state snapshots" description="Analytics has not received a trader snapshot for this run." />
           )}
         </Panel>
 
@@ -143,12 +151,12 @@ export default async function RunDetailPage({
                 <p>Score gap: {asText(latestDecision.scoreGap)}</p>
                 <p>Dominant side: {asText(latestDecision.dominantSide)}</p>
               </div>
-              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
                 {JSON.stringify(latestDecision.payloadJson ?? {}, null, 2)}
               </pre>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No decision snapshots found for this run.</p>
+            <EmptyState title="No decision snapshots" description="Analytics has not received a decision snapshot for this run." />
           )}
         </Panel>
       </section>
@@ -166,12 +174,12 @@ export default async function RunDetailPage({
                 <p>Last flush: {formatDate(latestBridge.lastFlushAt)}</p>
                 <p>Last success: {formatDate(latestBridge.lastSuccessAt)}</p>
               </div>
-              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-200">
+              <p className="rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-200">
                 {latestBridge.lastError ?? "No bridge error recorded."}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No bridge health records found for this run.</p>
+            <EmptyState title="No bridge diagnostics" description="There are no bridge health rows for this run." />
           )}
         </Panel>
 
@@ -189,21 +197,21 @@ export default async function RunDetailPage({
                 <p>Reason: {asText(latestLifecycle.reason)}</p>
                 <p>Protective: {latestLifecycle.isProtective === null ? "—" : latestLifecycle.isProtective ? "yes" : "no"}</p>
               </div>
-              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+              <pre className="max-h-[18rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
                 {JSON.stringify(latestLifecycle.payloadJson ?? {}, null, 2)}
               </pre>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No order lifecycle rows found for this run.</p>
-          )}
-        </Panel>
+              <EmptyState title="No order lifecycle rows" description="The run does not have order lifecycle evidence yet." />
+            )}
+          </Panel>
       </section>
 
       <section className="mt-6">
         <Panel eyebrow="Timeline" title="Reconstructed run timeline" description="Signals, blocker events, state snapshots, decisions, order lifecycle, bridge health, and trades in one chronological stream.">
           <DataTable columns={["Kind", "Time", "Detail", "Reason"]}>
             {data.timeline.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500">No timeline entries found for this run.</div>
+              <EmptyState title="No timeline entries" description="The reconstructed run timeline is empty for this run." />
             ) : (
               data.timeline.slice(0, 12).map((entry, index) => (
                 <DataRow
@@ -231,7 +239,7 @@ export default async function RunDetailPage({
         <Panel eyebrow="Trades" title="Closed trades" description="The trades associated with this run.">
           <DataTable columns={["PnL", "Zone", "Strategy", "Exit"]}>
             {data.trades.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500">No trades found for this run.</div>
+              <EmptyState title="No trades" description="The run does not have closed trade rows yet." />
             ) : (
               data.trades.slice(0, 8).map((trade) => (
                 <DataRow
@@ -253,7 +261,7 @@ export default async function RunDetailPage({
         <Panel eyebrow="Account ledger" title="Broker account trades" description="Account-level broker history captured under this run, useful for backfill verification.">
           <DataTable columns={["Trade", "Side", "PnL", "Time"]}>
             {accountTrades.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500">No broker account trades found for this run.</div>
+              <EmptyState title="No broker account trades" description="The account ledger has not been linked to this run." />
             ) : (
               accountTrades.slice(0, 8).map((trade) => (
                 <DataRow
@@ -277,7 +285,7 @@ export default async function RunDetailPage({
         <Panel eyebrow="Events" title="Latest telemetry" description="Most recent events captured during the run.">
           <DataTable columns={["Type", "Category", "Symbol", "Time"]}>
             {data.events.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500">No events found for this run.</div>
+              <EmptyState title="No events" description="The analytics event stream is empty for this run." />
             ) : (
               data.events.slice(0, 8).map((event) => (
                 <DataRow
@@ -294,6 +302,7 @@ export default async function RunDetailPage({
           </DataTable>
         </Panel>
       </section>
-    </main>
+      </main>
+    </PageShell>
   );
 }

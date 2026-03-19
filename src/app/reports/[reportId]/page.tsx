@@ -1,7 +1,9 @@
 import Link from "next/link";
 
-import { Badge, Panel, formatDate } from "@/components/dashboard";
+import { Badge, EmptyState, Panel, formatDate } from "@/components/dashboard";
+import { PageShell } from "@/components/page-shell";
 import { fetchReportDetail } from "@/lib/analytics";
+import { isSignedInRequest } from "@/lib/session";
 
 function listFromValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -12,33 +14,38 @@ export default async function ReportDetailPage({
 }: {
   params: Promise<{ reportId: string }>;
 }) {
+  const signedIn = await isSignedInRequest();
+  if (!signedIn) {
+    return <PageShell authenticated={false} />;
+  }
+
   const { reportId } = await params;
   const report = await fetchReportDetail(reportId);
 
   if (!report) {
     return (
-      <main className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
-        <Panel
-          eyebrow="AI report"
-          title="Report not found"
-          description="This report id is not present in analytics right now. The reports index is healthy, but there is no stored bundle for this identifier."
-          action={
-            <Link
-              href="/reports"
-              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
-            >
-              Back to reports
-            </Link>
-          }
-        >
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
-            Requested report id: <span className="font-mono text-zinc-100">{reportId}</span>
-          </div>
-          <p className="mt-4 text-sm text-zinc-400">
-            If you expected a report here, verify that RLM persisted it and that analytics can see the latest report rows.
-          </p>
-        </Panel>
-      </main>
+      <PageShell authenticated>
+        <main className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
+          <Panel
+            eyebrow="AI report"
+            title="Report not found"
+            description="This report id is not present in analytics right now. The reports index is healthy, but there is no stored bundle for this identifier."
+            action={
+              <Link
+                href="/reports"
+                className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+              >
+                Back to reports
+              </Link>
+            }
+          >
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 text-sm text-zinc-300">
+              Requested report id: <span className="font-mono text-zinc-100">{reportId}</span>
+            </div>
+            <p className="mt-4 text-sm text-zinc-400">If you expected a report here, verify that RLM persisted it and that analytics can see the latest report rows.</p>
+          </Panel>
+        </main>
+      </PageShell>
     );
   }
 
@@ -50,7 +57,8 @@ export default async function ReportDetailPage({
   const conclusion = reportJson.conclusion as Record<string, unknown> | undefined;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
+    <PageShell authenticated>
+      <main className="mx-auto max-w-6xl space-y-6 px-6 py-10 lg:px-8">
       <Panel
         eyebrow="AI report"
         title={report.title}
@@ -58,7 +66,7 @@ export default async function ReportDetailPage({
         action={
           <Link
             href="/"
-            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+            className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
           >
             Back to console
           </Link>
@@ -79,10 +87,10 @@ export default async function ReportDetailPage({
         <Panel eyebrow="Highlights" title="What the model called out">
           <div className="space-y-3">
             {highlights.length === 0 ? (
-              <p className="text-sm text-zinc-500">No highlights were stored.</p>
+              <EmptyState title="No highlights" description="This report payload did not persist a highlight list." />
             ) : (
               highlights.map((item) => (
-                <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                <p key={item} className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm leading-6 text-zinc-300">
                   {item}
                 </p>
               ))
@@ -96,10 +104,10 @@ export default async function ReportDetailPage({
               <h3 className="text-sm font-semibold text-zinc-50">Risks</h3>
               <div className="mt-3 space-y-3">
                 {risks.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No risks were stored.</p>
+                  <EmptyState title="No risks" description="The report payload did not persist any risk bullets." />
                 ) : (
                   risks.map((item) => (
-                    <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                    <p key={item} className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm leading-6 text-zinc-300">
                       {item}
                     </p>
                   ))
@@ -110,10 +118,10 @@ export default async function ReportDetailPage({
               <h3 className="text-sm font-semibold text-zinc-50">Next actions</h3>
               <div className="mt-3 space-y-3">
                 {nextActions.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No next actions were stored.</p>
+                  <EmptyState title="No next actions" description="The report payload did not persist any next-step bullets." />
                 ) : (
                   nextActions.map((item) => (
-                    <p key={item} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-zinc-300">
+                    <p key={item} className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm leading-6 text-zinc-300">
                       {item}
                     </p>
                   ))
@@ -126,22 +134,22 @@ export default async function ReportDetailPage({
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel eyebrow="Report context" title="Metrics used to write the report">
-          <pre className="overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+          <pre className="overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
             {JSON.stringify(reportJson.summary ?? reportJson.analysis_snapshot ?? {}, null, 2)}
           </pre>
         </Panel>
 
         <Panel eyebrow="Conclusion" title="Verdict and generated hypotheses">
           <div className="space-y-4">
-            <pre className="overflow-auto rounded-2xl border border-white/10 bg-zinc-950/60 p-4 text-xs leading-6 text-zinc-300">
+            <pre className="overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
               {JSON.stringify(conclusion ?? {}, null, 2)}
             </pre>
             <div className="space-y-3">
               {hypotheses.length === 0 ? (
-                <p className="text-sm text-zinc-500">No hypotheses were stored in the report payload.</p>
+                <EmptyState title="No hypotheses" description="The report payload did not persist any generated hypothesis rows." />
               ) : (
                 hypotheses.map((item, index) => (
-                  <article key={index} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <article key={index} className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4">
                     <div className="flex flex-wrap gap-2">
                       <Badge tone="neutral">{String(item.status ?? "unknown")}</Badge>
                       <Badge tone="accent">G{String(item.generation ?? "1")}</Badge>
@@ -154,6 +162,7 @@ export default async function ReportDetailPage({
           </div>
         </Panel>
       </section>
-    </main>
+      </main>
+    </PageShell>
   );
 }

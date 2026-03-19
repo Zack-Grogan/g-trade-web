@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 
-import { Badge, DataRow, DataTable, Panel, StatCard, formatDate, formatShort } from "@/components/dashboard";
+import { Badge, DataRow, DataTable, EmptyState, Panel, StatCard, formatDate, formatShort } from "@/components/dashboard";
+import { PageShell } from "@/components/page-shell";
 import { fetchRlmLibrary } from "@/lib/analytics";
+import { isSignedInRequest } from "@/lib/session";
 
 type LineageNode = {
   id: string;
@@ -46,7 +47,7 @@ function buildLineage(nodes: Array<{ hypothesisId: string; parentHypothesisId: s
 
 function LineageTree({ node, depth = 0 }: { node: LineageNode; depth?: number }) {
   return (
-    <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 ${depth > 0 ? "ml-4" : ""}`}>
+    <div className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 ${depth > 0 ? "ml-4" : ""}`}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={node.status === "supported" ? "success" : node.status === "rejected" ? "warning" : "neutral"}>{node.status}</Badge>
         <Badge tone="accent">G{node.generation}</Badge>
@@ -54,7 +55,7 @@ function LineageTree({ node, depth = 0 }: { node: LineageNode; depth?: number })
       <p className="mt-3 text-sm leading-6 text-zinc-200">{node.label}</p>
       <p className="mt-2 text-xs text-zinc-500">{node.regimeContext ?? "No regime context"}</p>
       {node.children.length ? (
-        <div className="mt-4 space-y-3 border-l border-white/10 pl-4">
+        <div className="mt-4 space-y-3 border-l border-zinc-800 pl-4">
           {node.children.map((child) => (
             <LineageTree key={child.id} node={child} depth={depth + 1} />
           ))}
@@ -65,30 +66,26 @@ function LineageTree({ node, depth = 0 }: { node: LineageNode; depth?: number })
 }
 
 export default async function RlmPage() {
-  const { userId } = await auth();
-  const data = userId ? await fetchRlmLibrary() : null;
+  const signedIn = await isSignedInRequest();
+  const data = signedIn ? await fetchRlmLibrary() : null;
 
-  if (!userId) {
-    return (
-      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <Panel eyebrow="RLM library" title="Sign in to view AI artifacts" description="This page shows persisted report bundles, hypotheses, and knowledge-store entries.">
-          <p className="text-sm text-zinc-400">Authenticate to open the graph and lineage explorer.</p>
-        </Panel>
-      </main>
-    );
+  if (!signedIn) {
+    return <PageShell authenticated={false} />;
   }
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <Panel
-          eyebrow="RLM library"
-          title="No RLM data yet"
-          description="Set `ANALYTICS_API_URL` and `ANALYTICS_API_KEY` on the web service to load report artifacts from the analytics API."
-        >
-          <p className="text-sm text-zinc-400">Once artifacts exist, the lineage explorer will render the recursive graph on this page.</p>
-        </Panel>
-      </main>
+      <PageShell authenticated>
+        <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+          <Panel
+            eyebrow="RLM library"
+            title="No RLM data yet"
+            description="Set `ANALYTICS_API_URL` and `ANALYTICS_API_KEY` on the web service to load report artifacts from the analytics API."
+          >
+            <p className="text-sm text-zinc-400">Once artifacts exist, the lineage explorer will render the recursive graph on this page.</p>
+          </Panel>
+        </main>
+      </PageShell>
     );
   }
 
@@ -104,7 +101,8 @@ export default async function RlmPage() {
   );
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+    <PageShell authenticated>
+      <main className="mx-auto max-w-7xl space-y-6 px-6 py-10 lg:px-8">
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <Panel
           eyebrow="RLM library"
@@ -113,13 +111,13 @@ export default async function RlmPage() {
           action={
             <Link
               href="/"
-              className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-white"
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
             >
-              Back to console
-            </Link>
-          }
-        >
-          <div className="flex flex-wrap gap-2">
+            Back to console
+          </Link>
+        }
+      >
+        <div className="flex flex-wrap gap-2">
             <Badge tone="accent">Graph-first</Badge>
             <Badge tone="success">Persisted artifacts</Badge>
             <Badge tone="neutral">Advisory only</Badge>
@@ -142,7 +140,7 @@ export default async function RlmPage() {
         <Panel eyebrow="Lineage graph" title="Hypothesis tree" description="Parents, children, and generations laid out as recursive clusters.">
           <div className="space-y-4">
             {lineage.length === 0 ? (
-              <p className="text-sm text-zinc-500">No hypotheses yet.</p>
+              <EmptyState title="No hypotheses yet" description="RLM has not persisted any hypothesis nodes." />
             ) : (
               lineage.map((node) => <LineageTree key={node.id} node={node} />)
             )}
@@ -152,10 +150,10 @@ export default async function RlmPage() {
         <Panel eyebrow="Reports" title="Latest AI reports" description="Structured report bundles rendered from the analytics database.">
           <div className="space-y-3">
             {data.reports.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-500">No reports yet.</div>
+              <EmptyState title="No reports yet" description="The report index is empty until RLM persists bundles." />
             ) : (
               data.reports.slice(0, 5).map((report) => (
-                <article key={report.reportId} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <article key={report.reportId} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">{report.modelProvider}</p>
@@ -183,7 +181,7 @@ export default async function RlmPage() {
         <Panel eyebrow="Research" title="Knowledge store" description="Survival and rejection history for the recursive loop.">
           <DataTable columns={["Verdict", "Confidence", "Directive", "Created"]}>
             {data.knowledgeStore.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500">No knowledge-store entries yet.</div>
+              <EmptyState title="No knowledge entries" description="Knowledge store rows appear here after recursive evaluation." />
             ) : (
               data.knowledgeStore.slice(0, 6).map((entry) => (
                 <DataRow
@@ -207,10 +205,10 @@ export default async function RlmPage() {
         <Panel eyebrow="Artifact summary" title="Latest hypotheses" description="The newest claims rendered with their current status.">
           <div className="space-y-3">
             {data.hypotheses.length === 0 ? (
-              <p className="text-sm text-zinc-500">No hypotheses yet.</p>
+              <EmptyState title="No hypotheses" description="There are no hypothesis rows in the current RLM snapshot." />
             ) : (
               data.hypotheses.slice(0, 5).map((item) => (
-                <article key={item.id} className="rounded-2xl border border-white/10 bg-zinc-950/50 p-4">
+                <article key={item.id} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <Badge tone={item.status === "supported" ? "success" : item.status === "rejected" ? "warning" : "neutral"}>{item.status}</Badge>
                     <span className="text-xs text-zinc-500">G{item.generation}</span>
@@ -223,6 +221,7 @@ export default async function RlmPage() {
           </div>
         </Panel>
       </section>
-    </main>
+      </main>
+    </PageShell>
   );
 }
