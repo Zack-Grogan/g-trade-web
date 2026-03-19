@@ -11,8 +11,11 @@ export type AnalyticsSummary = {
   trade_count: number;
   total_pnl: number;
   report_count: number;
+  bridge_failure_count: number;
   latest_report_at: string | null;
+  latest_bridge_failure_at: string | null;
   latest_state_at: string | null;
+  latest_trade_at: string | null;
   latest_run_seen_at: string | null;
 };
 
@@ -23,6 +26,10 @@ export type RunRow = {
   processId: number | null;
   dataMode: string | null;
   symbol: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  accountMode: string | null;
+  accountIsPractice: boolean | null;
   status: string | null;
   zone: string | null;
   zoneState: string | null;
@@ -77,6 +84,14 @@ export type TradeRow = {
   eventTagsJson: unknown | null;
   source: string | null;
   backfilled: boolean | null;
+  tradeId: string | null;
+  positionId: string | null;
+  decisionId: string | null;
+  attemptId: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  accountMode: string | null;
+  accountIsPractice: boolean | null;
   payloadJson: Record<string, unknown> | null;
 };
 
@@ -93,6 +108,10 @@ export type StateSnapshotRow = {
   positionPnl: number | null;
   dailyPnl: number | null;
   riskState: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  accountMode: string | null;
+  accountIsPractice: boolean | null;
   lastSignalJson: Record<string, unknown> | null;
   lastEntryReason: string | null;
   lastEntryBlockReason: string | null;
@@ -254,6 +273,59 @@ export type DashboardData = {
   metaLearnerStats: MetaLearnerStats | null;
 };
 
+export type AccountSummaryRow = {
+  accountId: string;
+  accountName: string | null;
+  accountMode: string | null;
+  accountIsPractice: boolean | null;
+  runCount: number;
+  tradeCount: number;
+  realizedPnl: number;
+  latestTradeAt: string | null;
+  latestRunSeenAt: string | null;
+};
+
+export type AccountTradeRow = {
+  id: number;
+  runId: string | null;
+  insertedAt: string | null;
+  occurredAt: string;
+  accountId: string;
+  accountName: string | null;
+  accountMode: string | null;
+  accountIsPractice: boolean | null;
+  brokerTradeId: string;
+  brokerOrderId: string | null;
+  contractId: string | null;
+  side: number | null;
+  size: number | null;
+  price: number | null;
+  profitAndLoss: number | null;
+  fees: number | null;
+  voided: boolean | null;
+  source: string | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
+export type BridgeFailureRow = {
+  id: number;
+  runId: string | null;
+  observedAt: string;
+  bridgeStatus: string | null;
+  queueDepth: number | null;
+  lastFlushAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
+export type ServiceHealthSnapshot = {
+  analytics: { status: string; pool: Record<string, unknown> } | null;
+  bridge: Record<string, unknown> | null;
+  runtimeLogs: { count: number; latestLoggedAt: string | null } | null;
+  reports: { count: number; latestCreatedAt: string | null } | null;
+};
+
 export type RunDetail = {
   run: RunRow | null;
   events: EventRow[];
@@ -399,6 +471,10 @@ function normalizeRunRow(run: unknown): RunRow {
     processId: numberOrNull(record.process_id ?? record.processId),
     dataMode: stringOrNull(record.data_mode ?? record.dataMode),
     symbol: stringOrNull(record.symbol),
+    accountId: stringOrNull(record.account_id ?? record.accountId),
+    accountName: stringOrNull(record.account_name ?? record.accountName),
+    accountMode: stringOrNull(record.account_mode ?? record.accountMode),
+    accountIsPractice: booleanOrNull(record.account_is_practice ?? record.accountIsPractice),
     status: stringOrNull(record.status),
     zone: stringOrNull(record.zone),
     zoneState: stringOrNull(record.zone_state ?? record.zoneState),
@@ -459,6 +535,14 @@ function normalizeTradeRow(trade: unknown): TradeRow {
     eventTagsJson: recordOrNull(record.event_tags_json ?? record.eventTagsJson),
     source: stringOrNull(record.source),
     backfilled: booleanOrNull(record.backfilled),
+    tradeId: stringOrNull(record.trade_id ?? record.tradeId),
+    positionId: stringOrNull(record.position_id ?? record.positionId),
+    decisionId: stringOrNull(record.decision_id ?? record.decisionId),
+    attemptId: stringOrNull(record.attempt_id ?? record.attemptId),
+    accountId: stringOrNull(record.account_id ?? record.accountId),
+    accountName: stringOrNull(record.account_name ?? record.accountName),
+    accountMode: stringOrNull(record.account_mode ?? record.accountMode),
+    accountIsPractice: booleanOrNull(record.account_is_practice ?? record.accountIsPractice),
     payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
@@ -478,6 +562,10 @@ function normalizeStateSnapshotRow(snapshot: unknown): StateSnapshotRow {
     positionPnl: numberOrNull(record.position_pnl ?? record.positionPnl),
     dailyPnl: numberOrNull(record.daily_pnl ?? record.dailyPnl),
     riskState: stringOrNull(record.risk_state ?? record.riskState),
+    accountId: stringOrNull(record.account_id ?? record.accountId),
+    accountName: stringOrNull(record.account_name ?? record.accountName),
+    accountMode: stringOrNull(record.account_mode ?? record.accountMode),
+    accountIsPractice: booleanOrNull(record.account_is_practice ?? record.accountIsPractice),
     lastSignalJson: recordOrNull(record.last_signal_json ?? record.lastSignalJson),
     lastEntryReason: stringOrNull(record.last_entry_reason ?? record.lastEntryReason),
     lastEntryBlockReason: stringOrNull(record.last_entry_block_reason ?? record.lastEntryBlockReason),
@@ -588,6 +676,61 @@ function normalizeBridgeHealthRow(row: unknown): BridgeHealthRow {
   };
 }
 
+function normalizeAccountSummaryRow(row: unknown): AccountSummaryRow {
+  const record = asRecord(row);
+  return {
+    accountId: stringOrEmpty(record.account_id ?? record.accountId),
+    accountName: stringOrNull(record.account_name ?? record.accountName),
+    accountMode: stringOrNull(record.account_mode ?? record.accountMode),
+    accountIsPractice: booleanOrNull(record.account_is_practice ?? record.accountIsPractice),
+    runCount: numberOrZero(record.run_count ?? record.runCount),
+    tradeCount: numberOrZero(record.trade_count ?? record.tradeCount),
+    realizedPnl: numberOrZero(record.realized_pnl ?? record.realizedPnl),
+    latestTradeAt: stringOrNull(record.latest_trade_at ?? record.latestTradeAt),
+    latestRunSeenAt: stringOrNull(record.latest_run_seen_at ?? record.latestRunSeenAt),
+  };
+}
+
+function normalizeAccountTradeRow(row: unknown): AccountTradeRow {
+  const record = asRecord(row);
+  return {
+    id: numberOrZero(record.id),
+    runId: stringOrNull(record.run_id ?? record.runId),
+    insertedAt: stringOrNull(record.inserted_at ?? record.insertedAt),
+    occurredAt: stringOrEmpty(record.occurred_at ?? record.occurredAt),
+    accountId: stringOrEmpty(record.account_id ?? record.accountId),
+    accountName: stringOrNull(record.account_name ?? record.accountName),
+    accountMode: stringOrNull(record.account_mode ?? record.accountMode),
+    accountIsPractice: booleanOrNull(record.account_is_practice ?? record.accountIsPractice),
+    brokerTradeId: stringOrEmpty(record.broker_trade_id ?? record.brokerTradeId),
+    brokerOrderId: stringOrNull(record.broker_order_id ?? record.brokerOrderId),
+    contractId: stringOrNull(record.contract_id ?? record.contractId),
+    side: numberOrNull(record.side),
+    size: numberOrNull(record.size),
+    price: numberOrNull(record.price),
+    profitAndLoss: numberOrNull(record.profit_and_loss ?? record.profitAndLoss),
+    fees: numberOrNull(record.fees),
+    voided: booleanOrNull(record.voided),
+    source: stringOrNull(record.source),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
+function normalizeBridgeFailureRow(row: unknown): BridgeFailureRow {
+  const record = asRecord(row);
+  return {
+    id: numberOrZero(record.id),
+    runId: stringOrNull(record.run_id ?? record.runId),
+    observedAt: stringOrEmpty(record.observed_at ?? record.observedAt),
+    bridgeStatus: stringOrNull(record.bridge_status ?? record.bridgeStatus),
+    queueDepth: numberOrNull(record.queue_depth ?? record.queueDepth),
+    lastFlushAt: stringOrNull(record.last_flush_at ?? record.lastFlushAt),
+    lastSuccessAt: stringOrNull(record.last_success_at ?? record.lastSuccessAt),
+    lastError: stringOrNull(record.last_error ?? record.lastError),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
 function normalizeTimelineEntry(entry: unknown): TimelineEntry {
   const record = asRecord(entry);
   return {
@@ -625,14 +768,20 @@ export async function fetchDashboardData(): Promise<DashboardData | null> {
       runs(limit: $limit) {
         runId
         createdAt
+        lastSeenAt
         processId
         dataMode
         symbol
+        accountId
+        accountName
+        accountMode
+        accountIsPractice
         payloadJson
       }
       trades(limit: $limit) {
         id
         runId
+        insertedAt
         entryTime
         exitTime
         direction
@@ -645,6 +794,14 @@ export async function fetchDashboardData(): Promise<DashboardData | null> {
         regime
         source
         backfilled
+        tradeId
+        positionId
+        decisionId
+        attemptId
+        accountId
+        accountName
+        accountMode
+        accountIsPractice
         payloadJson
       }
       hypotheses(limit: $limit) {
@@ -844,4 +1001,58 @@ export async function fetchSearchResults(query: string): Promise<{
     runs: (runs?.runs ?? []).map(normalizeRunRow),
     events: (events?.events ?? []).map(normalizeEventRow),
   };
+}
+
+export async function fetchAccountSummaries(): Promise<AccountSummaryRow[]> {
+  const payload = await fetchAnalyticsJson<{ accounts: Record<string, unknown>[] }>("/accounts", { limit: 20 });
+  return (payload?.accounts ?? []).map(normalizeAccountSummaryRow);
+}
+
+export async function fetchAccountTrades(params?: {
+  accountId?: string | null;
+  runId?: string | null;
+  limit?: number;
+}): Promise<AccountTradeRow[]> {
+  const payload = await fetchAnalyticsJson<{ accountTrades: Record<string, unknown>[] }>("/account-trades", {
+    account_id: params?.accountId ?? undefined,
+    run_id: params?.runId ?? undefined,
+    limit: params?.limit ?? 50,
+  });
+  return (payload?.accountTrades ?? []).map(normalizeAccountTradeRow);
+}
+
+export async function fetchBridgeFailures(runId?: string | null): Promise<BridgeFailureRow[]> {
+  const payload = await fetchAnalyticsJson<{ failures: Record<string, unknown>[] }>("/bridge/failures", {
+    run_id: runId ?? undefined,
+    limit: 20,
+  });
+  return (payload?.failures ?? []).map(normalizeBridgeFailureRow);
+}
+
+export async function fetchServiceHealth(): Promise<ServiceHealthSnapshot | null> {
+  const payload = await fetchAnalyticsJson<Record<string, unknown>>("/service-health");
+  if (!payload) {
+    return null;
+  }
+  return {
+    analytics: recordOrNull(payload.analytics) as { status: string; pool: Record<string, unknown> } | null,
+    bridge: recordOrNull(payload.bridge),
+    runtimeLogs: payload.runtime_logs
+      ? {
+          count: numberOrZero(asRecord(payload.runtime_logs).count),
+          latestLoggedAt: stringOrNull(asRecord(payload.runtime_logs).latest_logged_at),
+        }
+      : null,
+    reports: payload.reports
+      ? {
+          count: numberOrZero(asRecord(payload.reports).count),
+          latestCreatedAt: stringOrNull(asRecord(payload.reports).latest_created_at),
+        }
+      : null,
+  };
+}
+
+export function isSyntheticRunId(runId: string): boolean {
+  const normalized = runId.trim().toLowerCase();
+  return normalized.startsWith("reality-check-") || normalized.startsWith("e2e-test-") || normalized.startsWith("test-run-");
 }

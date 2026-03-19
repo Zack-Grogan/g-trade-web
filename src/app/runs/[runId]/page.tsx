@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge, DataRow, DataTable, MiniBarChart, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
-import { fetchRunDetail } from "@/lib/analytics";
+import { fetchAccountTrades, fetchRunDetail } from "@/lib/analytics";
 
 function asText(value: unknown) {
   if (value === null || value === undefined || value === "") {
@@ -38,7 +38,7 @@ export default async function RunDetailPage({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
-  const data = await fetchRunDetail(runId);
+  const [data, accountTrades] = await Promise.all([fetchRunDetail(runId), fetchAccountTrades({ runId, limit: 12 })]);
 
   if (!data?.run) {
     notFound();
@@ -69,6 +69,8 @@ export default async function RunDetailPage({
         <div className="flex flex-wrap gap-2">
           <Badge tone="neutral">{data.run.dataMode ?? "unknown"}</Badge>
           <Badge tone="accent">{data.run.symbol ?? "n/a"}</Badge>
+          {data.run.accountName ? <Badge tone={data.run.accountMode === "practice" ? "warning" : "success"}>{data.run.accountName}</Badge> : null}
+          {data.run.accountMode ? <Badge tone={data.run.accountMode === "practice" ? "warning" : "success"}>{data.run.accountMode}</Badge> : null}
           <Badge tone="success">{formatDate(data.run.createdAt)}</Badge>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -76,6 +78,7 @@ export default async function RunDetailPage({
             <p className="text-sm text-zinc-300">Process: {asText(data.run.processId)}</p>
             <p className="mt-2 text-sm text-zinc-300">Mode: {asText(data.run.dataMode)}</p>
             <p className="mt-2 text-sm text-zinc-300">Symbol: {asText(data.run.symbol)}</p>
+            <p className="mt-2 text-sm text-zinc-300">Account: {asText(data.run.accountName ?? data.run.accountId)}</p>
           </Panel>
           <Panel eyebrow="Trades" title="Closed trades" description="P&L from the latest trades on this run.">
             <p className="text-2xl font-semibold text-zinc-50">{formatShort(data.trades.length)}</p>
@@ -247,6 +250,30 @@ export default async function RunDetailPage({
           </DataTable>
         </Panel>
 
+        <Panel eyebrow="Account ledger" title="Broker account trades" description="Account-level broker history captured under this run, useful for backfill verification.">
+          <DataTable columns={["Trade", "Side", "PnL", "Time"]}>
+            {accountTrades.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-zinc-500">No broker account trades found for this run.</div>
+            ) : (
+              accountTrades.slice(0, 8).map((trade) => (
+                <DataRow
+                  key={`${trade.accountId}-${trade.brokerTradeId}`}
+                  cells={[
+                    <span key="trade">{trade.brokerTradeId}</span>,
+                    <span key="side">{trade.side === 1 ? "buy" : trade.side === 0 ? "sell" : "unknown"}</span>,
+                    <span key="pnl" className={(trade.profitAndLoss ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                      {formatCurrency(trade.profitAndLoss ?? 0)}
+                    </span>,
+                    <span key="time">{formatDate(trade.occurredAt)}</span>,
+                  ]}
+                />
+              ))
+            )}
+          </DataTable>
+        </Panel>
+      </section>
+
+      <section className="mt-6">
         <Panel eyebrow="Events" title="Latest telemetry" description="Most recent events captured during the run.">
           <DataTable columns={["Type", "Category", "Symbol", "Time"]}>
             {data.events.length === 0 ? (

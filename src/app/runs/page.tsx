@@ -1,8 +1,18 @@
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 
-import { Badge, DataRow, DataTable, Panel, formatDate } from "@/components/dashboard";
-import { fetchDashboardData } from "@/lib/analytics";
+import { Badge, DataRow, DataTable, Panel, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
+import { fetchDashboardData, isSyntheticRunId } from "@/lib/analytics";
+
+function modeTone(mode: string | null) {
+  if (mode === "practice") {
+    return "warning" as const;
+  }
+  if (mode === "live") {
+    return "success" as const;
+  }
+  return "neutral" as const;
+}
 
 export default async function RunsPage() {
   const { userId } = await auth();
@@ -11,7 +21,7 @@ export default async function RunsPage() {
   if (!userId) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
-        <Panel eyebrow="Runs" title="Sign in to view run evidence" description="This page shows the latest run records and links to the investigation detail view.">
+        <Panel eyebrow="Runs" title="Sign in to view run evidence" description="This page filters the operator run index down to real account-aware evidence.">
           <p className="text-sm text-zinc-400">Authenticate to inspect the run index.</p>
         </Panel>
       </main>
@@ -28,12 +38,15 @@ export default async function RunsPage() {
     );
   }
 
+  const realRuns = data.runs.filter((run) => !isSyntheticRunId(run.runId));
+  const syntheticRuns = data.runs.length - realRuns.length;
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
       <Panel
         eyebrow="Runs"
-        title="Latest run records"
-        description="A compact index for investigations, with links back into the full console detail view."
+        title="Real run records"
+        description="This index hides synthetic validation runs by default so the list reflects operator-relevant evidence."
         action={
           <Link
             href="/"
@@ -43,22 +56,40 @@ export default async function RunsPage() {
           </Link>
         }
       >
-        <DataTable columns={["Run", "Mode", "Symbol", "Created"]}>
-          {data.runs.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-zinc-500">No runs yet.</div>
+        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Visible runs</p>
+            <p className="mt-2 text-xl font-semibold text-zinc-50">{formatShort(realRuns.length)}</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Synthetic hidden</p>
+            <p className="mt-2 text-xl font-semibold text-zinc-50">{formatShort(syntheticRuns)}</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest ledger P&L</p>
+            <p className="mt-2 text-xl font-semibold text-zinc-50">{formatCurrency(data.summary.total_pnl)}</p>
+          </div>
+        </div>
+
+        <DataTable columns={["Run", "Account", "Mode", "Last seen"]}>
+          {realRuns.length === 0 ? (
+            <div className="px-4 py-4 text-sm text-zinc-500">No real runs yet. If only validation rows exist, backfill account and run evidence first.</div>
           ) : (
-            data.runs.map((run) => (
+            realRuns.map((run) => (
               <DataRow
                 key={run.runId}
                 cells={[
                   <Link key="run" href={`/runs/${run.runId}`} className="font-mono text-xs text-zinc-100 transition hover:text-cyan-300">
                     {run.runId}
                   </Link>,
-                  <Badge key="mode" tone="neutral">
-                    {run.dataMode ?? "—"}
+                  <div key="account">
+                    <p>{run.accountName ?? "Unknown account"}</p>
+                    <p className="text-xs text-zinc-500">{run.accountId ?? "no account id"}</p>
+                  </div>,
+                  <Badge key="mode" tone={modeTone(run.accountMode)}>
+                    {run.accountMode ?? "unknown"}
                   </Badge>,
-                  <span key="symbol">{run.symbol ?? "—"}</span>,
-                  <span key="created">{formatDate(run.createdAt)}</span>,
+                  <span key="created">{formatDate(run.lastSeenAt ?? run.createdAt)}</span>,
                 ]}
               />
             ))
