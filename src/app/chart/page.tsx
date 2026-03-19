@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, DataRow, DataTable, EmptyState, Panel, StatCard, formatCurrency, formatDate, formatShort } from "@/components/dashboard";
 import { MarketChart, type ChartMarker, type ChartReferenceLine } from "@/components/market-chart";
 import { PageShell } from "@/components/page-shell";
-import { fetchDashboardData, fetchRunDetail, isSyntheticRunId } from "@/lib/analytics";
+import { fetchAccountSummaries, fetchAccountTrades, fetchDashboardData, fetchRunDetail, isSyntheticRunId } from "@/lib/analytics";
 import { isSignedInRequest } from "@/lib/session";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -51,7 +51,11 @@ export default async function ChartPage({
 
   const params = await searchParams;
   const requestedRunId = (params.runId || "").trim();
-  const dashboard = await fetchDashboardData();
+  const [dashboard, accountSummaries, accountTrades] = await Promise.all([
+    fetchDashboardData(),
+    fetchAccountSummaries(),
+    fetchAccountTrades({ limit: 16 }),
+  ]);
 
   if (!dashboard) {
     return (
@@ -72,6 +76,8 @@ export default async function ChartPage({
   const latestDecision = runDetail?.decisionSnapshots[0] ?? null;
   const latestSnapshot = runDetail?.stateSnapshots[0] ?? null;
   const latestTrade = runDetail?.trades[0] ?? null;
+  const latestAccountSummary = accountSummaries[0] ?? null;
+  const latestAccountTrade = accountTrades[0] ?? null;
   const marketSeries = runDetail?.marketTape ?? [];
   const featureSnapshot = asRecord(latestDecision?.featureSnapshot);
   const diagnostics = asRecord(featureSnapshot.diagnostics);
@@ -103,6 +109,37 @@ export default async function ChartPage({
     markers.push({ label: "Exit", timestamp: latestTrade.exitTime, value: latestTrade.exitPrice, tone: "accent" });
   }
 
+  let cumulativeAccountPnl = 0;
+  const accountPoints = accountTrades
+    .slice()
+    .reverse()
+    .map((trade) => {
+      cumulativeAccountPnl += trade.profitAndLoss ?? 0;
+      return {
+        timestamp: trade.occurredAt,
+        value: cumulativeAccountPnl,
+      };
+    })
+    .filter((point) => point.value !== null);
+  const ledgerMode = marketSeries.length === 0 && accountPoints.length > 0;
+  const chartPoints = ledgerMode ? accountPoints : pricePoints;
+  const chartMarkers: ChartMarker[] = ledgerMode && latestAccountTrade
+    ? [
+        {
+          label: latestAccountTrade.brokerTradeId.slice(-8) || latestAccountTrade.brokerTradeId,
+          timestamp: latestAccountTrade.occurredAt,
+          value: chartPoints.at(-1)?.value ?? latestAccountTrade.profitAndLoss ?? 0,
+          tone: (latestAccountTrade.profitAndLoss ?? 0) >= 0 ? "success" : "warning",
+        },
+      ]
+    : markers;
+  const chartReferenceLines: ChartReferenceLine[] = ledgerMode
+    ? [
+        { label: "Break-even", value: 0, tone: "neutral" as const },
+        { label: "Realized PnL", value: latestAccountSummary?.realizedPnl ?? null, tone: (latestAccountSummary?.realizedPnl ?? 0) >= 0 ? "success" as const : "warning" as const },
+      ].filter((line) => line.value !== null)
+    : referenceLines;
+
   const executorProjection = [
     latestDecision?.dominantSide ? `Dominant side leans ${latestDecision.dominantSide}.` : null,
     latestDecision?.allowEntries === false ? "Entries are blocked by the current executor snapshot." : latestDecision?.allowEntries ? "Entries are currently allowed by the executor snapshot." : null,
@@ -113,6 +150,8 @@ export default async function ChartPage({
     asNumber(diagnostics.atr_value) !== null ? `ATR: ${asNumber(diagnostics.atr_value)?.toFixed(2)}.` : null,
     asNumber(diagnostics.rsi) !== null ? `RSI: ${asNumber(diagnostics.rsi)?.toFixed(1)}.` : null,
     asNumber(diagnostics.spread) !== null ? `Spread: ${asNumber(diagnostics.spread)?.toFixed(2)}.` : null,
+    ledgerMode ? `Ledger fallback active for ${latestAccountSummary?.accountName ?? latestAccountSummary?.accountId ?? "the current account"}.` : null,
+    ledgerMode ? `${formatShort(accountTrades.length)} account trades are available for performance review.` : null,
   ].filter((item): item is string => Boolean(item));
 
   const indicatorRows: Array<[string, unknown, string]> = [
@@ -135,9 +174,44 @@ export default async function ChartPage({
     ["Allow entries", latestDecision?.allowEntries, "Entry gate"],
     ["Tradeable", latestDecision?.executionTradeable, "Entry gate"],
     ["Regime", latestDecision?.regimeState, "Regime classifier"],
+    ["Account", latestAccountSummary?.accountName ?? latestAccountSummary?.accountId, "Ledger fallback"],
+    ["Account mode", latestAccountSummary?.accountMode, "Practice vs live"],
+    ["Account trades", latestAccountSummary?.tradeCount ?? accountTrades.length, "Broker ledger"],
+    ["Realized PnL", latestAccountSummary?.realizedPnl, "Broker ledger"],
+    ["Latest broker trade", latestAccountTrade?.brokerTradeId, "Most recent backfilled trade"],
   ];
 
-  const chartLabel = run?.accountName ?? run?.accountId ?? "Unknown account";
+  const chartLabel = run?.accountName ?? latestAccountSummary?.accountName ?? latestAccountSummary?.accountId ?? "Unknown account";
+  const chartSubtitle = ledgerMode
+    ? "Account ledger fallback with realized PnL over recent broker trades."
+    : "Market tape with stored executor overlays.";
+  const chartTitle = ledgerMode ? "Account performance chart" : "Price chart";
+  const latestReviewTradeId = latestTrade?.tradeId ?? latestTrade?.id ?? latestAccountTrade?.brokerTradeId ?? latestAccountTrade?.id ?? null;
+  const latestTradeView: {
+    pnl: number;
+    direction: number;
+    strategy: string | null;
+    entryTime: string | null;
+    exitTime: string | null;
+    entryPrice: number;
+    exitPrice: number;
+    tradeId?: string | number | null;
+    id?: number;
+  } | null = latestTrade
+    ? latestTrade
+    : ledgerMode && latestAccountTrade
+      ? {
+          pnl: latestAccountTrade.profitAndLoss ?? 0,
+          direction: latestAccountTrade.side === 1 ? 1 : latestAccountTrade.side === 0 ? -1 : 0,
+          strategy: latestAccountTrade.source,
+          entryTime: latestAccountTrade.occurredAt,
+          exitTime: latestAccountTrade.occurredAt,
+          entryPrice: latestAccountTrade.price ?? 0,
+          exitPrice: latestAccountTrade.price ?? 0,
+          tradeId: latestAccountTrade.brokerTradeId,
+          id: latestAccountTrade.id,
+        }
+      : null;
 
   return (
     <PageShell authenticated>
@@ -155,9 +229,9 @@ export default async function ChartPage({
                 >
                   Back to runs
                 </Link>
-                {latestTrade ? (
+                {latestReviewTradeId ? (
                   <Link
-                    href={`/trades/${latestTrade.tradeId ?? latestTrade.id}`}
+                    href={`/trades/${latestReviewTradeId}`}
                     className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
                   >
                     Open latest trade review
@@ -168,15 +242,15 @@ export default async function ChartPage({
           >
             <div className="flex flex-wrap gap-2">
               <Badge tone={run?.accountMode === "live" ? "success" : "warning"}>{chartLabel}</Badge>
-              <Badge tone="accent">{run?.accountMode ?? "unknown mode"}</Badge>
+              <Badge tone="accent">{run?.accountMode ?? latestAccountSummary?.accountMode ?? "unknown mode"}</Badge>
               <Badge tone="neutral">{run?.symbol ?? "ES"}</Badge>
-              <Badge tone="neutral">{formatDate(run?.lastSeenAt ?? run?.createdAt)}</Badge>
+              <Badge tone="neutral">{formatDate(run?.lastSeenAt ?? run?.createdAt ?? latestAccountSummary?.latestTradeAt ?? latestAccountSummary?.latestRunSeenAt)}</Badge>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Latest price" value={currentPrice === null ? "—" : formatCurrency(currentPrice)} note="Most recent market tape sample" />
-              <StatCard label="Trend" value={latestDecision?.dominantSide ?? "—"} note={latestDecision?.regimeState ?? "No regime state"} />
-              <StatCard label="Score gap" value={latestDecision?.scoreGap === null || latestDecision?.scoreGap === undefined ? "—" : formatShort(Number(latestDecision.scoreGap))} note="Executor side separation" />
-              <StatCard label="Market tape" value={formatShort(marketSeries.length)} note={runDetail?.timeline.length ? `${formatShort(runDetail.timeline.length)} timeline rows` : "No timeline rows"} />
+              <StatCard label={ledgerMode ? "Latest ledger PnL" : "Latest price"} value={currentPrice === null ? "—" : formatCurrency(currentPrice)} note={ledgerMode ? "Cumulative realized PnL" : "Most recent market tape sample"} />
+              <StatCard label={ledgerMode ? "Account trades" : "Trend"} value={ledgerMode ? formatShort(accountTrades.length) : latestDecision?.dominantSide ?? "—"} note={ledgerMode ? "Broker ledger rows" : latestDecision?.regimeState ?? "No regime state"} />
+              <StatCard label={ledgerMode ? "Realized PnL" : "Score gap"} value={ledgerMode ? formatCurrency(latestAccountSummary?.realizedPnl ?? 0) : latestDecision?.scoreGap === null || latestDecision?.scoreGap === undefined ? "—" : formatShort(Number(latestDecision.scoreGap))} note={ledgerMode ? "Account summary" : "Executor side separation"} />
+              <StatCard label={ledgerMode ? "Latest trade" : "Market tape"} value={ledgerMode ? (latestAccountTrade?.brokerTradeId ?? "—") : formatShort(marketSeries.length)} note={ledgerMode ? "Broker trade identifier" : runDetail?.timeline.length ? `${formatShort(runDetail.timeline.length)} timeline rows` : "No timeline rows"} />
             </div>
           </Panel>
 
@@ -197,11 +271,11 @@ export default async function ChartPage({
 
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <MarketChart
-            title="Price chart"
-            subtitle="Market tape with stored executor overlays"
-            points={pricePoints}
-            markers={markers}
-            referenceLines={referenceLines}
+            title={chartTitle}
+            subtitle={chartSubtitle}
+            points={chartPoints}
+            markers={chartMarkers}
+            referenceLines={chartReferenceLines}
             height={320}
           />
 
@@ -253,21 +327,21 @@ export default async function ChartPage({
           </Panel>
 
           <Panel eyebrow="Trade bridge" title="Latest closed trade" description="When there is a real trade, this route should link directly into the trade reviewer.">
-            {latestTrade ? (
+            {latestTradeView ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <Badge tone={latestTrade.pnl >= 0 ? "success" : "warning"}>{formatCurrency(latestTrade.pnl)}</Badge>
-                  <Badge tone="neutral">{latestTrade.direction > 0 ? "long" : latestTrade.direction < 0 ? "short" : "flat"}</Badge>
-                  <Badge tone="accent">{latestTrade.strategy ?? "no strategy"}</Badge>
+                  <Badge tone={latestTradeView.pnl >= 0 ? "success" : "warning"}>{formatCurrency(latestTradeView.pnl)}</Badge>
+                  <Badge tone="neutral">{latestTradeView.direction > 0 ? "long" : latestTradeView.direction < 0 ? "short" : "flat"}</Badge>
+                  <Badge tone="accent">{latestTradeView.strategy ?? "no strategy"}</Badge>
                 </div>
                 <div className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
-                  <p>Entry: {latestTrade.entryTime ? formatDate(latestTrade.entryTime) : "—"}</p>
-                  <p>Exit: {latestTrade.exitTime ? formatDate(latestTrade.exitTime) : "—"}</p>
-                  <p>Entry price: {latestTrade.entryPrice === null ? "—" : formatCurrency(latestTrade.entryPrice)}</p>
-                  <p>Exit price: {latestTrade.exitPrice === null ? "—" : formatCurrency(latestTrade.exitPrice)}</p>
+                  <p>Entry: {latestTradeView.entryTime ? formatDate(latestTradeView.entryTime) : "—"}</p>
+                  <p>Exit: {latestTradeView.exitTime ? formatDate(latestTradeView.exitTime) : "—"}</p>
+                  <p>Entry price: {latestTradeView.entryPrice === null ? "—" : formatCurrency(latestTradeView.entryPrice)}</p>
+                  <p>Exit price: {latestTradeView.exitPrice === null ? "—" : formatCurrency(latestTradeView.exitPrice)}</p>
                 </div>
                 <Link
-                  href={`/trades/${latestTrade.tradeId ?? latestTrade.id}`}
+                  href={`/trades/${latestReviewTradeId}`}
                   className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
                 >
                   Open trade reviewer
