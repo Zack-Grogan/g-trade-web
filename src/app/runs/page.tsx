@@ -42,6 +42,7 @@ export default async function RunsPage() {
 
   const realRuns = data.runs.filter((run) => !isSyntheticRunId(run.runId));
   const syntheticRuns = data.runs.length - realRuns.length;
+  const accountLedgerPnl = accountSummaries[0]?.realizedPnl ?? data.summary.total_pnl;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
@@ -58,7 +59,7 @@ export default async function RunsPage() {
           </Link>
         }
       >
-        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          <div className="mb-5 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Visible runs</p>
             <p className="mt-2 text-xl font-semibold text-zinc-50">{formatShort(realRuns.length)}</p>
@@ -69,7 +70,7 @@ export default async function RunsPage() {
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Latest ledger P&L</p>
-            <p className="mt-2 text-xl font-semibold text-zinc-50">{formatCurrency(data.summary.total_pnl)}</p>
+            <p className="mt-2 text-xl font-semibold text-zinc-50">{formatCurrency(accountLedgerPnl)}</p>
           </div>
         </div>
 
