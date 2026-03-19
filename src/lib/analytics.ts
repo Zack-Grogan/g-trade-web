@@ -67,6 +67,30 @@ export type EventRow = {
   payloadJson: Record<string, unknown> | null;
 };
 
+export type MarketTapeRow = {
+  id: number;
+  runId: string;
+  capturedAt: string;
+  insertedAt: string;
+  processId: number | null;
+  symbol: string | null;
+  contractId: string | null;
+  bid: number | null;
+  ask: number | null;
+  last: number | null;
+  volume: number | null;
+  bidSize: number | null;
+  askSize: number | null;
+  lastSize: number | null;
+  volumeIsCumulative: boolean | null;
+  quoteIsSynthetic: boolean | null;
+  tradeSide: number | null;
+  latencyMs: number | null;
+  source: string | null;
+  sequence: number | null;
+  payloadJson: Record<string, unknown> | null;
+};
+
 export type TradeRow = {
   id: number;
   runId: string;
@@ -329,6 +353,7 @@ export type ServiceHealthSnapshot = {
 export type RunDetail = {
   run: RunRow | null;
   events: EventRow[];
+  marketTape: MarketTapeRow[];
   trades: TradeRow[];
   stateSnapshots: StateSnapshotRow[];
   decisionSnapshots: DecisionSnapshotRow[];
@@ -339,6 +364,62 @@ export type RunDetail = {
 };
 
 export type ReportDetail = ReportRow | null;
+
+export type TradeReviewAnalysis = {
+  summary: string;
+  marketContext: {
+    sampleCount: number;
+    firstTimestamp: string | null;
+    lastTimestamp: string | null;
+    firstPrice: number | null;
+    lastPrice: number | null;
+    stats: Record<string, unknown>;
+  };
+  entryExit: {
+    direction: string;
+    entryTime: string | null;
+    exitTime: string | null;
+    duration: string | null;
+    entryPrice: number | null;
+    exitPrice: number | null;
+    pnl: number | null;
+  };
+  executorBelief: {
+    decisionId: string | null;
+    dominantSide: string | null;
+    scoreGap: number | null;
+    longScore: number | null;
+    shortScore: number | null;
+    allowEntries: boolean | null;
+    executionTradeable: boolean | null;
+    regimeState: string | null;
+    regimeReason: string | null;
+    activeSession: string | null;
+    featureSnapshot: Record<string, unknown> | null;
+    signedFeatures: Record<string, unknown>;
+    diagnostics: Record<string, unknown>;
+    longFeatures: Record<string, unknown>;
+    shortFeatures: Record<string, unknown>;
+    flatFeatures: Record<string, unknown>;
+  };
+  narrative: string[];
+  marketNotes: string[];
+  executionNotes: string[];
+  executorProjection: string[];
+};
+
+export type TradeReviewBundle = {
+  trade: TradeRow | null;
+  run: RunRow | null;
+  marketTape: MarketTapeRow[];
+  decisionSnapshots: DecisionSnapshotRow[];
+  stateSnapshots: StateSnapshotRow[];
+  orderLifecycle: OrderLifecycleRow[];
+  events: EventRow[];
+  timeline: TimelineEntry[];
+  blockers: TimelineEntry[];
+  analysis: TradeReviewAnalysis | null;
+};
 
 const ANALYTICS_URL = process.env.ANALYTICS_API_URL || "";
 const ANALYTICS_KEY = process.env.ANALYTICS_API_KEY || "";
@@ -516,6 +597,33 @@ function normalizeEventRow(event: unknown): EventRow {
   };
 }
 
+function normalizeMarketTapeRow(row: unknown): MarketTapeRow {
+  const record = asRecord(row);
+  return {
+    id: numberOrZero(record.id),
+    runId: stringOrEmpty(record.run_id ?? record.runId),
+    capturedAt: stringOrEmpty(record.captured_at ?? record.capturedAt),
+    insertedAt: stringOrEmpty(record.inserted_at ?? record.insertedAt),
+    processId: numberOrNull(record.process_id ?? record.processId),
+    symbol: stringOrNull(record.symbol),
+    contractId: stringOrNull(record.contract_id ?? record.contractId),
+    bid: numberOrNull(record.bid),
+    ask: numberOrNull(record.ask),
+    last: numberOrNull(record.last),
+    volume: numberOrNull(record.volume),
+    bidSize: numberOrNull(record.bid_size ?? record.bidSize),
+    askSize: numberOrNull(record.ask_size ?? record.askSize),
+    lastSize: numberOrNull(record.last_size ?? record.lastSize),
+    volumeIsCumulative: booleanOrNull(record.volume_is_cumulative ?? record.volumeIsCumulative),
+    quoteIsSynthetic: booleanOrNull(record.quote_is_synthetic ?? record.quoteIsSynthetic),
+    tradeSide: numberOrNull(record.trade_side ?? record.tradeSide),
+    latencyMs: numberOrNull(record.latency_ms ?? record.latencyMs),
+    source: stringOrNull(record.source),
+    sequence: numberOrNull(record.sequence),
+    payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
+  };
+}
+
 function normalizeTradeRow(trade: unknown): TradeRow {
   const record = asRecord(trade);
   return {
@@ -615,12 +723,12 @@ function normalizeDecisionSnapshotRow(snapshot: unknown): DecisionSnapshotRow {
     regimeState: stringOrNull(record.regime_state ?? record.regimeState),
     regimeReason: stringOrNull(record.regime_reason ?? record.regimeReason),
     activeSession: stringOrNull(record.active_session ?? record.activeSession),
-    activeVetoes: arrayOrEmpty(record.active_vetoes ?? record.activeVetoes),
-    featureSnapshot: recordOrNull(record.feature_snapshot ?? record.featureSnapshot),
-    entryGuard: recordOrNull(record.entry_guard ?? record.entryGuard),
-    unresolvedEntry: recordOrNull(record.unresolved_entry ?? record.unresolvedEntry),
-    eventContext: recordOrNull(record.event_context ?? record.eventContext),
-    orderFlow: recordOrNull(record.order_flow ?? record.orderFlow),
+    activeVetoes: arrayOrEmpty(record.active_vetoes_json ?? record.active_vetoes ?? record.activeVetoes),
+    featureSnapshot: recordOrNull(record.feature_snapshot_json ?? record.feature_snapshot ?? record.featureSnapshot),
+    entryGuard: recordOrNull(record.entry_guard_json ?? record.entry_guard ?? record.entryGuard),
+    unresolvedEntry: recordOrNull(record.unresolved_entry_json ?? record.unresolved_entry ?? record.unresolvedEntry),
+    eventContext: recordOrNull(record.event_context_json ?? record.event_context ?? record.eventContext),
+    orderFlow: recordOrNull(record.order_flow_json ?? record.order_flow ?? record.orderFlow),
     payloadJson: recordOrNull(record.payload_json ?? record.payloadJson),
   };
 }
@@ -872,9 +980,10 @@ export async function fetchDashboardData(): Promise<DashboardData | null> {
 }
 
 export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
-  const [run, events, trades, snapshots, decisions, lifecycles, bridgeHealth, timeline] = await Promise.all([
+  const [run, events, marketTape, trades, snapshots, decisions, lifecycles, bridgeHealth, timeline] = await Promise.all([
     fetchAnalyticsJson<Record<string, unknown>>(`/runs/${runId}`),
     fetchAnalyticsJson<{ events: Record<string, unknown>[] }>(`/runs/${runId}/events`, { limit: 100 }),
+    fetchAnalyticsJson<{ marketTape: Record<string, unknown>[] }>(`/runs/${runId}/market_tape`, { limit: 200 }),
     fetchAnalyticsJson<{ trades: Record<string, unknown>[] }>(`/runs/${runId}/trades`, { limit: 100 }),
     fetchAnalyticsJson<{ stateSnapshots: Record<string, unknown>[] }>(`/runs/${runId}/state_snapshots`, { limit: 50 }),
     fetchAnalyticsJson<{ decisionSnapshots: Record<string, unknown>[] }>(`/runs/${runId}/decision_snapshots`, { limit: 50 }),
@@ -885,13 +994,14 @@ export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
     }),
   ]);
 
-  if (!run && !events && !trades && !snapshots && !decisions && !lifecycles && !bridgeHealth && !timeline) {
+  if (!run && !events && !marketTape && !trades && !snapshots && !decisions && !lifecycles && !bridgeHealth && !timeline) {
     return null;
   }
 
   return {
     run: run ? normalizeRunRow(run) : null,
     events: (events?.events ?? []).map(normalizeEventRow),
+    marketTape: (marketTape?.marketTape ?? []).map(normalizeMarketTapeRow),
     trades: (trades?.trades ?? []).map(normalizeTradeRow),
     stateSnapshots: (snapshots?.stateSnapshots ?? []).map(normalizeStateSnapshotRow),
     decisionSnapshots: (decisions?.decisionSnapshots ?? []).map(normalizeDecisionSnapshotRow),
@@ -899,6 +1009,49 @@ export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
     bridgeHealth: (bridgeHealth?.bridgeHealth ?? []).map(normalizeBridgeHealthRow),
     timeline: (timeline?.timeline ?? []).map(normalizeTimelineEntry),
     blockers: (timeline?.blockers ?? []).map(normalizeTimelineEntry),
+  };
+}
+
+export async function fetchTradeReview(tradeId: string | number): Promise<TradeReviewBundle | null> {
+  const payload = await fetchAnalyticsJson<{
+    trade: Record<string, unknown> | null;
+    run: Record<string, unknown> | null;
+    marketTape: Record<string, unknown>[];
+    decisionSnapshots: Record<string, unknown>[];
+    stateSnapshots: Record<string, unknown>[];
+    orderLifecycle: Record<string, unknown>[];
+    events: Record<string, unknown>[];
+    timeline: Record<string, unknown>[];
+    blockers: Record<string, unknown>[];
+    analysis: Record<string, unknown> | null;
+  }>(`/trades/${tradeId}`, { limit: 300 });
+
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    trade: payload.trade ? normalizeTradeRow(payload.trade) : null,
+    run: payload.run ? normalizeRunRow(payload.run) : null,
+    marketTape: (payload.marketTape ?? []).map(normalizeMarketTapeRow),
+    decisionSnapshots: (payload.decisionSnapshots ?? []).map(normalizeDecisionSnapshotRow),
+    stateSnapshots: (payload.stateSnapshots ?? []).map(normalizeStateSnapshotRow),
+    orderLifecycle: (payload.orderLifecycle ?? []).map(normalizeOrderLifecycleRow),
+    events: (payload.events ?? []).map(normalizeEventRow),
+    timeline: (payload.timeline ?? []).map(normalizeTimelineEntry),
+    blockers: (payload.blockers ?? []).map(normalizeTimelineEntry),
+    analysis: payload.analysis
+      ? {
+          summary: stringOrEmpty(payload.analysis.summary),
+          marketContext: asRecord(payload.analysis.marketContext) as TradeReviewAnalysis["marketContext"],
+          entryExit: asRecord(payload.analysis.entryExit) as TradeReviewAnalysis["entryExit"],
+          executorBelief: asRecord(payload.analysis.executorBelief) as TradeReviewAnalysis["executorBelief"],
+          narrative: Array.isArray(payload.analysis.narrative) ? payload.analysis.narrative.map(stringOrEmpty) : [],
+          marketNotes: Array.isArray(payload.analysis.marketNotes) ? payload.analysis.marketNotes.map(stringOrEmpty) : [],
+          executionNotes: Array.isArray(payload.analysis.executionNotes) ? payload.analysis.executionNotes.map(stringOrEmpty) : [],
+          executorProjection: Array.isArray(payload.analysis.executorProjection) ? payload.analysis.executorProjection.map(stringOrEmpty) : [],
+        }
+      : null,
   };
 }
 

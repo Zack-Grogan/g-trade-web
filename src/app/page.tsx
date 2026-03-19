@@ -108,6 +108,7 @@ export default async function Home({
   const activeRun = selectedRunId ? await fetchRunDetail(selectedRunId) : null;
   const latestReport = dashboard.reports[0] ?? null;
   const latestHypothesis = rlmLibrary?.hypotheses[0] ?? null;
+  const latestClosedTrade = activeRun?.trades[0] ?? null;
   const accountTradeBars = accountTrades.slice(0, 8).map((trade) => trade.profitAndLoss ?? 0);
   const accountTradeLabels = accountTrades.slice(0, 8).map((trade) => trade.accountName ?? trade.accountId);
   const operatorActions = buildOperatorActions({
@@ -127,12 +128,20 @@ export default async function Home({
           title="Use the web to judge account health, not just browse artifacts"
           description="The account ledger, bridge freshness, and latest blocker pressure are the first things to inspect before touching strategy code."
           action={
-            <Link
-              href="/runs"
-              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
-            >
-              Open run index
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/chart"
+                className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+              >
+                Open chart
+              </Link>
+              <Link
+                href="/runs"
+                className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+              >
+                Open run index
+              </Link>
+            </div>
           }
         >
           <div className="flex flex-wrap gap-2">
@@ -175,12 +184,28 @@ export default async function Home({
               </div>
             </div>
             {activeRun?.run ? (
-              <Link
-                href={`/runs/${activeRun.run.runId}`}
-                className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
-              >
-                Open full investigation view
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/runs/${activeRun.run.runId}`}
+                  className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
+                >
+                  Open full investigation view
+                </Link>
+                <Link
+                  href={`/chart?runId=${encodeURIComponent(activeRun.run.runId)}`}
+                  className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+                >
+                  Open run chart
+                </Link>
+                {latestClosedTrade ? (
+                  <Link
+                    href={`/trades/${latestClosedTrade.tradeId ?? latestClosedTrade.id}`}
+                    className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+                  >
+                    Open latest trade review
+                  </Link>
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-zinc-500">No run detail is loaded yet.</p>
             )}

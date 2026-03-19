@@ -66,12 +66,28 @@ export default async function RunDetailPage({
         title={data.run.runId}
         description="The run record, its event stream, bridge health, and the trades that were closed under it."
         action={
-          <Link
-            href="/"
-            className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
-          >
-            Back to console
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+            >
+              Back to console
+            </Link>
+            <Link
+              href={`/chart?runId=${encodeURIComponent(data.run.runId)}`}
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-white"
+            >
+              Open chart
+            </Link>
+            {data.trades[0] ? (
+              <Link
+                href={`/trades/${data.trades[0].tradeId ?? data.trades[0].id}`}
+                className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
+              >
+                Latest trade review
+              </Link>
+            ) : null}
+          </div>
         }
       >
         <div className="flex flex-wrap gap-2">
@@ -245,9 +261,9 @@ export default async function RunDetailPage({
                 <DataRow
                   key={trade.id}
                   cells={[
-                    <span key="pnl" className={trade.pnl >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                    <Link key="pnl" href={`/trades/${trade.tradeId ?? trade.id}`} className={trade.pnl >= 0 ? "text-emerald-300 transition hover:text-emerald-200" : "text-rose-300 transition hover:text-rose-200"}>
                       {formatCurrency(trade.pnl)}
-                    </span>,
+                    </Link>,
                     <span key="zone">{trade.zone ?? "—"}</span>,
                     <span key="strategy">{trade.strategy ?? "—"}</span>,
                     <span key="exit">{formatDate(trade.exitTime ?? trade.entryTime)}</span>,
